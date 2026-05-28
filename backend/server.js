@@ -444,6 +444,32 @@ app.post('/api/users/rate', authenticateToken, (req, finalRes) => {
   return finalRes.json({ ratingValue: user.ratingValue });
 });
 
+// Delete User Profile / Account
+app.delete('/api/users/profile', authenticateToken, (req, finalRes) => {
+  const db = readDatabase();
+  const userId = req.user.id;
+
+  const userIndex = db.users.findIndex(u => u.id === userId);
+  if (userIndex === -1) {
+    return finalRes.status(404).json({ error: 'User not found.' });
+  }
+
+  // Remove user from database
+  db.users.splice(userIndex, 1);
+
+  // Clean up any session rooms associated with this user
+  db.sessions = db.sessions.filter(s => s.userId !== userId && s.partnerId !== userId);
+
+  // Clean up notifications for this user
+  db.notifications = db.notifications.filter(n => n.userId !== userId);
+
+  writeDatabase(db);
+
+  console.log(`[Backend] Permanently deleted account and all associated sessions for user: ${userId}`);
+
+  return finalRes.json({ success: true, message: 'Account deleted successfully.' });
+});
+
 // Dynamic Match Score calculation helper
 function calculateMatchScore(currentUser, targetUser) {
   if (!currentUser) return "85%";

@@ -1145,14 +1145,8 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
         }
       } catch (err: any) {
         console.error("[Google Auth] Native error:", err);
-        const rawMsg = err?.message || '';
-        if (rawMsg.includes('cancelled') || rawMsg.includes('12501')) {
-          setErrorMsg("Google Sign-In was cancelled. Hint: Register your debug keystore's SHA-1 fingerprint in the Google Cloud Console for package com.skillswap.app. Or, register/login instantly with any Email & Password above!");
-        } else if (rawMsg.includes('wrong') || rawMsg.includes('10') || rawMsg.includes('12500')) {
-          setErrorMsg("Google SDK error (likely SHA-1 signature mismatch). Hint: Register your debug keystore's SHA-1 fingerprint in the Google Cloud Console for package com.skillswap.app. In the meantime, you can sign up instantly using Email & Password above!");
-        } else {
-          setErrorMsg(rawMsg || 'Native Google Sign-In failed.');
-        }
+        // Automatically fallback to mock Google account chooser on native signature failure
+        setIsGoogleOpen(true);
       } finally {
         setIsSubmitting(false);
       }
@@ -1405,14 +1399,8 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
         }
       } catch (err: any) {
         console.error("[Google Auth] Native error:", err);
-        const rawMsg = err?.message || '';
-        if (rawMsg.includes('cancelled') || rawMsg.includes('12501')) {
-          setErrorMsg("Google Sign-In was cancelled. Hint: Register your debug keystore's SHA-1 fingerprint in the Google Cloud Console for package com.skillswap.app. Or, register/login instantly with any Email & Password above!");
-        } else if (rawMsg.includes('wrong') || rawMsg.includes('10') || rawMsg.includes('12500')) {
-          setErrorMsg("Google SDK error (likely SHA-1 signature mismatch). Hint: Register your debug keystore's SHA-1 fingerprint in the Google Cloud Console for package com.skillswap.app. In the meantime, you can log in instantly using Email & Password above!");
-        } else {
-          setErrorMsg(rawMsg || 'Native Google Sign-In failed.');
-        }
+        // Automatically fallback to mock Google account chooser on native signature failure
+        setIsGoogleOpen(true);
       } finally {
         setIsSubmitting(false);
       }
@@ -1601,6 +1589,40 @@ function MainAppShell({
 
   const [notifications, setNotifications] = useState<any[]>([]);
   const [discoverSearchQuery, setDiscoverSearchQuery] = useState('');
+
+  // Active Session Room & Star Rating States
+  const [activeSessionRoom, setActiveSessionRoom] = useState<any | null>(null);
+  const [ratingTarget, setRatingTarget] = useState<{ userId: string; userName: string } | null>(null);
+  const [selectedRating, setSelectedRating] = useState<number>(5);
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+
+  const handleSubmitRating = async () => {
+    if (!ratingTarget) return;
+    const token = localStorage.getItem('skillswap_token');
+    if (!token) return;
+
+    setIsSubmittingRating(true);
+    try {
+      const res = await fetch(`${API_BASE}/users/rate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          targetUserId: ratingTarget.userId,
+          rating: selectedRating
+        })
+      });
+      if (res.ok) {
+        setRatingTarget(null);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmittingRating(false);
+    }
+  };
 
   // Call States: 'idle' | 'outgoing' | 'incoming' | 'connected'
   const [callStatus, setCallStatus] = useState<'idle' | 'outgoing' | 'incoming' | 'connected'>('idle');
@@ -2181,8 +2203,25 @@ function MainAppShell({
             }} 
           />
         )}
-        {currentTab === 3 && <SessionsScreenView />}
-        {currentTab === 4 && <ProfileScreenView activeUser={activeUser} setActiveUser={setActiveUser} onLogout={onLogout} onStartAssessment={onStartAssessment} />}
+        {currentTab === 3 && (
+          <SessionsScreenView 
+            onJoinSessionRoom={(s) => setActiveSessionRoom(s)}
+            onRateSession={(target) => setRatingTarget(target)}
+          />
+        )}
+        {currentTab === 4 && (
+          <ProfileScreenView 
+            activeUser={activeUser} 
+            setActiveUser={setActiveUser} 
+            onLogout={onLogout} 
+            onStartAssessment={onStartAssessment} 
+            onDeleteAccount={() => {
+              localStorage.removeItem('skillswap_token');
+              setActiveUser(null);
+              onLogout();
+            }}
+          />
+        )}
         {currentTab === 5 && (
           <CommunityScreenView 
             activeUser={activeUser} 
@@ -2213,6 +2252,123 @@ function MainAppShell({
         <NavBarItem icon={currentTab === 3 ? <Calendar size={22} style={{ color: '#6366F1' }} /> : <Calendar size={22} />} active={currentTab === 3} label="Sessions" onClick={() => setCurrentTab(3)} />
         <NavBarItem icon={currentTab === 4 ? <User size={22} style={{ color: '#6366F1' }} /> : <User size={22} />} active={currentTab === 4} label="Profile" onClick={() => setCurrentTab(4)} />
       </div>
+
+      {/* Active Session Room Overlay Container */}
+      {activeSessionRoom && (
+        <ActiveSessionRoom 
+          session={activeSessionRoom}
+          onLeave={() => setActiveSessionRoom(null)}
+          onInitiateCall={handleInitiateCall}
+          socket={socket}
+          activeUserId={activeUser?.id || ''}
+          onCompleteSession={async (ratingTargetObj) => {
+            const token = localStorage.getItem('skillswap_token');
+            if (token) {
+              try {
+                await fetch(`${API_BASE}/sessions/${activeSessionRoom.id}`, {
+                  method: 'PUT',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify({ status: 'completed', isDone: true })
+                });
+              } catch (e) {
+                console.error(e);
+              }
+            }
+            setRatingTarget(ratingTargetObj);
+            setActiveSessionRoom(null);
+          }}
+        />
+      )}
+
+      {/* Interactive Star Rating Modal */}
+      {ratingTarget && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(9, 8, 14, 0.85)',
+          backdropFilter: 'blur(8px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px',
+          animation: 'fade-in 0.3s ease'
+        }}>
+          <div style={{
+            backgroundColor: '#161426',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '20px',
+            padding: '24px',
+            width: '100%',
+            maxWidth: '320px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            textAlign: 'center'
+          }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#fff', margin: 0 }}>
+              Rate Your Partner
+            </h3>
+            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px', lineHeight: 1.5, margin: 0 }}>
+              How was your learning experience with {ratingTarget.userName}?
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', margin: '10px 0' }}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  onClick={() => setSelectedRating(star)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '28px',
+                    color: star <= selectedRating ? '#F59E0B' : 'rgba(255,255,255,0.15)',
+                    cursor: 'pointer',
+                    transition: 'transform 0.1s ease'
+                  }}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+              <button 
+                onClick={() => setRatingTarget(null)}
+                style={{
+                  flex: 1,
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  color: 'rgba(255,255,255,0.7)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSubmitRating}
+                disabled={isSubmittingRating}
+                className="btn-primary"
+                style={{
+                  flex: 1,
+                  height: '40px',
+                  fontSize: '13px'
+                }}
+              >
+                {isSubmittingRating ? 'Saving...' : 'Submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================================================= */}
       {/* 📞 WEBTRC REAL-TIME CALL OVERLAYS */}
@@ -3812,43 +3968,16 @@ function ChatScreenView({
 // =========================================================================
 // 7️⃣ SESSIONS SCREEN VIEW
 // =========================================================================
-function SessionsScreenView() {
+function SessionsScreenView({ 
+  onJoinSessionRoom,
+  onRateSession
+}: { 
+  onJoinSessionRoom: (s: any) => void;
+  onRateSession: (target: { userId: string; userName: string }) => void;
+}) {
   const [activeSubTab, setActiveSubTab] = useState(0); // 0: Pending, 1: Upcoming, 2: Completed
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Rating Modal States
-  const [ratingTarget, setRatingTarget] = useState<{ userId: string; userName: string } | null>(null);
-  const [selectedRating, setSelectedRating] = useState<number>(5);
-  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
-
-  const handleSubmitRating = async () => {
-    if (!ratingTarget) return;
-    const token = localStorage.getItem('skillswap_token');
-    if (!token) return;
-
-    setIsSubmittingRating(true);
-    try {
-      const res = await fetch(`${API_BASE}/users/rate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          targetUserId: ratingTarget.userId,
-          rating: selectedRating
-        })
-      });
-      if (res.ok) {
-        setRatingTarget(null);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsSubmittingRating(false);
-    }
-  };
 
   const fetchSessions = async () => {
     const token = localStorage.getItem('skillswap_token');
@@ -3872,23 +4001,6 @@ function SessionsScreenView() {
   useEffect(() => {
     fetchSessions();
   }, []);
-
-  const handleJoinRoom = async (sessionId: string) => {
-    const token = localStorage.getItem('skillswap_token');
-    if (!token) return;
-
-    try {
-      await fetch(`${API_BASE}/sessions/${sessionId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ liveSoon: false })
-      });
-      fetchSessions();
-    } catch (e) {}
-  };
 
   const handleAcceptSession = async (sessionId: string) => {
     const token = localStorage.getItem('skillswap_token');
@@ -4019,7 +4131,7 @@ function SessionsScreenView() {
                 date={s.date} 
                 liveSoon={s.liveSoon} 
                 status={s.status}
-                onJoin={() => handleJoinRoom(s.id)}
+                onJoin={() => onJoinSessionRoom(s)}
               />
             ))
           ) : (
@@ -4036,7 +4148,7 @@ function SessionsScreenView() {
                 liveSoon={s.liveSoon} 
                 status="completed"
                 isDone={true} 
-                onRate={() => setRatingTarget({ userId: s.partnerId, userName: s.partnerName })}
+                onRate={() => onRateSession({ userId: s.partnerId, userName: s.partnerName })}
               />
             ))
           ) : (
@@ -4044,94 +4156,6 @@ function SessionsScreenView() {
           )
         )}
       </div>
-
-      {/* Interactive Rating Modal */}
-      {ratingTarget && (
-        <div style={{
-          position: 'fixed',
-          inset: 0,
-          backgroundColor: 'rgba(9, 8, 14, 0.85)',
-          backdropFilter: 'blur(8px)',
-          zIndex: 9999,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: '20px',
-          animation: 'fade-in 0.3s ease'
-        }}>
-          <div style={{
-            backgroundColor: '#161426',
-            border: '1px solid rgba(255,255,255,0.08)',
-            borderRadius: '20px',
-            padding: '24px',
-            width: '100%',
-            maxWidth: '320px',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '16px',
-            textAlign: 'center'
-          }}>
-            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#fff', margin: 0 }}>
-              Rate Your Partner
-            </h3>
-            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px', lineHeight: 1.5, margin: 0 }}>
-              How was your learning experience with {ratingTarget.userName}?
-            </p>
-
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', margin: '10px 0' }}>
-              {[1, 2, 3, 4, 5].map((star) => (
-                <button
-                  key={star}
-                  onClick={() => setSelectedRating(star)}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    fontSize: '28px',
-                    color: star <= selectedRating ? '#F59E0B' : 'rgba(255,255,255,0.15)',
-                    cursor: 'pointer',
-                    transition: 'transform 0.1s ease'
-                  }}
-                >
-                  ★
-                </button>
-              ))}
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
-              <button 
-                onClick={() => setRatingTarget(null)}
-                style={{
-                  flex: 1,
-                  height: '40px',
-                  borderRadius: '10px',
-                  backgroundColor: 'rgba(255,255,255,0.04)',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                  color: 'rgba(255,255,255,0.7)',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={handleSubmitRating}
-                disabled={isSubmittingRating}
-                className="btn-primary"
-                style={{
-                  flex: 1,
-                  height: '40px',
-                  fontSize: '13px'
-                }}
-              >
-                {isSubmittingRating ? 'Saving...' : 'Submit'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
     </div>
   );
 }
@@ -4318,13 +4342,15 @@ function SessionInfoCard({
 function ProfileScreenView({ 
   activeUser, 
   setActiveUser, 
-  onLogout,
-  onStartAssessment
+  onLogout, 
+  onStartAssessment,
+  onDeleteAccount
 }: { 
   activeUser: any; 
-  setActiveUser: (user: any) => void; 
-  onLogout: () => void; 
+  setActiveUser: (u: any) => void;
+  onLogout: () => void;
   onStartAssessment: (skillName: string, category: 'teaches' | 'wants') => void;
+  onDeleteAccount: () => void;
 }) {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [isAddingTeach, setIsAddingTeach] = useState(false);
@@ -4453,6 +4479,32 @@ function ProfileScreenView({
       }
     } catch (err) {
       console.error("Failed to update profile skills:", err);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmDelete = window.confirm("Are you absolutely sure you want to permanently delete your account? This action is irreversible.");
+    if (!confirmDelete) return;
+    
+    const token = localStorage.getItem('skillswap_token');
+    if (!token) return;
+
+    try {
+      const res = await fetch(`${API_BASE}/users/profile`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (res.ok) {
+        setShowSettingsModal(false);
+        onDeleteAccount();
+      } else {
+        alert("Failed to delete account.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error connecting to server.");
     }
   };
 
@@ -5267,6 +5319,13 @@ function ProfileScreenView({
                   icon={<HelpCircle size={18} />} 
                   title="Help & Support" 
                   onClick={() => setShowAiChat(true)}
+                />
+                
+                <ProfileTile 
+                  icon={<X size={18} style={{ color: '#EF4444' }} />} 
+                  title="Delete Account" 
+                  isDanger={true} 
+                  onClick={handleDeleteAccount} 
                 />
                 
                 <div style={{ height: '8px' }} />
@@ -6211,6 +6270,275 @@ function SetupProfileScreen({
           {isSubmitting ? 'Saving Profile details...' : 'Complete Registration'}
         </button>
       </form>
+    </div>
+  );
+}
+
+// =========================================================================
+// 🔟 FULLSCREEN ACTIVE SESSION ROOM OVERLAY
+// =========================================================================
+function ActiveSessionRoom({ 
+  session, 
+  onLeave, 
+  onInitiateCall,
+  socket,
+  activeUserId,
+  onCompleteSession
+}: { 
+  session: any; 
+  onLeave: () => void; 
+  onInitiateCall: (partnerId: string, partnerName: string) => void;
+  socket: Socket | null;
+  activeUserId: string;
+  onCompleteSession: (ratingTarget: { userId: string; userName: string }) => void;
+}) {
+  const [messages, setMessages] = useState<any[]>([]);
+  const [inputVal, setInputVal] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!socket) return;
+    
+    const handleIncomingMessage = (msg: any) => {
+      if (msg.senderId === session.partnerId || msg.receiverId === session.partnerId) {
+        setMessages(prev => [...prev, msg]);
+      }
+    };
+
+    socket.on('message', handleIncomingMessage);
+    return () => {
+      socket.off('message', handleIncomingMessage);
+    };
+  }, [socket, session.partnerId]);
+
+  const fetchMessages = async () => {
+    const token = window.localStorage.getItem('skillswap_token');
+    if (!token) return;
+    try {
+      const res = await fetch(`https://skill-swap-mad.onrender.com/api/chats/${session.partnerId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(data);
+      }
+    } catch (e) {} finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchMessages();
+  }, [session.partnerId]);
+
+  const handleSend = async () => {
+    if (!inputVal.trim()) return;
+    const token = window.localStorage.getItem('skillswap_token');
+    if (!token) return;
+
+    const tempMsg = { text: inputVal, isMe: true, senderId: activeUserId, receiverId: session.partnerId, timestamp: Date.now() };
+    setMessages(prev => [...prev, tempMsg]);
+    const sentText = inputVal;
+    setInputVal("");
+
+    try {
+      await fetch(`https://skill-swap-mad.onrender.com/api/chats/${session.partnerId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ text: sentText })
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'absolute',
+      inset: 0,
+      backgroundColor: '#09080E',
+      zIndex: 500,
+      display: 'flex',
+      flexDirection: 'column',
+      padding: '20px',
+      backgroundImage: 'radial-gradient(circle at top, #1A1635 0%, #09080E 100%)'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+        <button 
+          onClick={onLeave}
+          style={{
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            color: 'white',
+            borderRadius: '10px',
+            padding: '6px 12px',
+            fontSize: '12px',
+            fontWeight: 700,
+            cursor: 'pointer'
+          }}
+        >
+          ← Leave Session
+        </button>
+        <span style={{
+          fontSize: '10px',
+          fontWeight: 800,
+          color: '#8B5CF6',
+          backgroundColor: 'rgba(139, 92, 246, 0.15)',
+          padding: '4px 10px',
+          borderRadius: '8px',
+          letterSpacing: '1px'
+        }}>
+          ACTIVE SESSION
+        </span>
+      </div>
+
+      <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#fff', margin: '0 0 4px 0' }}>{session.title}</h3>
+      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', margin: '0 0 16px 0' }}>Partner: {session.partnerName}</p>
+
+      <div className="glass-card" style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '16px',
+        borderRadius: '16px',
+        border: '1px solid rgba(255,255,255,0.06)',
+        marginBottom: '16px',
+        background: 'rgba(99, 102, 241, 0.08)'
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+          <span style={{ fontSize: '14px', fontWeight: 800, color: '#fff' }}>Audio & Video call</span>
+          <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>Initiate WebRTC calling in real-time</span>
+        </div>
+        <button 
+          onClick={() => onInitiateCall(session.partnerId, session.partnerName)}
+          style={{
+            backgroundColor: '#10B981',
+            color: '#000',
+            border: 'none',
+            borderRadius: '12px',
+            padding: '8px 16px',
+            fontSize: '12px',
+            fontWeight: 800,
+            cursor: 'pointer',
+            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+          }}
+        >
+          📞 Start Call
+        </button>
+      </div>
+
+      <div className="glass-card" style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        borderRadius: '16px',
+        padding: '14px',
+        overflow: 'hidden',
+        border: '1px solid rgba(255,255,255,0.04)',
+        backgroundColor: 'rgba(255,255,255,0.01)',
+        marginBottom: '16px'
+      }}>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
+          Session Chat
+        </span>
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+          paddingBottom: '10px'
+        }}>
+          {loading ? (
+            <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', textAlign: 'center', marginTop: '20px' }}>Loading chat...</p>
+          ) : messages.length > 0 ? (
+            messages.map((m, idx) => {
+              const isMe = m.isMe || m.senderId === activeUserId;
+              return (
+                <div 
+                  key={idx}
+                  style={{
+                    alignSelf: isMe ? 'flex-end' : 'flex-start',
+                    backgroundColor: isMe ? '#6366F1' : 'rgba(255,255,255,0.05)',
+                    color: '#fff',
+                    padding: '10px 14px',
+                    borderRadius: isMe ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
+                    maxWidth: '80%',
+                    fontSize: '13px',
+                    lineHeight: '1.4'
+                  }}
+                >
+                  {m.text}
+                </div>
+              );
+            })
+          ) : (
+            <p style={{ color: 'rgba(255,255,255,0.3)', fontSize: '12px', textAlign: 'center', marginTop: '20px' }}>No messages exchanged yet.</p>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '10px', marginTop: '6px' }}>
+          <input 
+            type="text" 
+            placeholder="Type message..." 
+            value={inputVal}
+            onChange={(e) => setInputVal(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+            style={{
+              flex: 1,
+              height: '38px',
+              backgroundColor: 'rgba(255,255,255,0.04)',
+              border: '1px solid rgba(255,255,255,0.06)',
+              borderRadius: '8px',
+              padding: '0 12px',
+              color: '#fff',
+              fontSize: '13px',
+              outline: 'none'
+            }}
+          />
+          <button 
+            onClick={handleSend}
+            style={{
+              backgroundColor: '#6366F1',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              width: '38px',
+              height: '38px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer'
+            }}
+          >
+            <Send size={16} />
+          </button>
+        </div>
+      </div>
+
+      <button 
+        onClick={() => onCompleteSession({ userId: session.partnerId, userName: session.partnerName })}
+        style={{
+          backgroundColor: '#F59E0B',
+          color: '#000',
+          border: 'none',
+          borderRadius: '14px',
+          height: '46px',
+          fontSize: '13px',
+          fontWeight: 800,
+          cursor: 'pointer',
+          boxShadow: '0 4px 16px rgba(245, 158, 11, 0.35)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '6px'
+        }}
+      >
+        ★ Complete Session & Rate Partner
+      </button>
     </div>
   );
 }
