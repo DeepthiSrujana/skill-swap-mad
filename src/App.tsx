@@ -34,47 +34,7 @@ import {
 const localStorage = window.sessionStorage;
 
 const getBackendUrls = () => {
-  // 1. Check if the user has configured a custom backend server URL
-  const customUrl = window.localStorage.getItem('skillswap_backend_url');
-  if (customUrl) {
-    console.log("[SkillSwap] Using custom configured backend URL:", customUrl);
-    const cleanUrl = customUrl.endsWith('/') ? customUrl.slice(0, -1) : customUrl;
-    return {
-      API_BASE: `${cleanUrl}/api`,
-      SOCKET_URL: cleanUrl,
-      FALLBACK_API_BASE: '',
-      FALLBACK_SOCKET_URL: ''
-    };
-  }
-
-  // 2. Default production settings
-  // @ts-ignore
-  const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
-  
-  const currentHost = typeof window !== 'undefined' ? window.location.hostname : '';
-  const isPublicTunnel = currentHost && !['localhost', '127.0.0.1', '0.0.0.0'].includes(currentHost) && !currentHost.startsWith('192.168.');
-
   const productionUrl = 'https://skill-swap-mad.onrender.com';
-
-  if (isPublicTunnel) {
-    console.log("[SkillSwap] Dynamic tunnel domain detected. Connecting to Render production backend:", productionUrl);
-    return {
-      API_BASE: `${productionUrl}/api`,
-      SOCKET_URL: productionUrl,
-      FALLBACK_API_BASE: '',
-      FALLBACK_SOCKET_URL: ''
-    };
-  }
-
-  if (isCapacitor) {
-    console.log("[SkillSwap] Running under Capacitor. Connecting to Render production backend:", productionUrl);
-    return {
-      API_BASE: `${productionUrl}/api`,
-      SOCKET_URL: productionUrl,
-      FALLBACK_API_BASE: '',
-      FALLBACK_SOCKET_URL: ''
-    };
-  }
   return {
     API_BASE: `${productionUrl}/api`,
     SOCKET_URL: productionUrl,
@@ -635,6 +595,11 @@ export default function App() {
   // Auto-login check on mount
   useEffect(() => {
     async function checkAutoLogin() {
+      // Clear legacy custom server configuration to enforce permanent production backend
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem('skillswap_backend_url');
+      }
+
       // @ts-ignore
       const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
       
@@ -917,124 +882,6 @@ function OnboardingScreen({ onGetStarted, onLoginRoute }: { onGetStarted: () => 
 // =========================================================================
 // 2.5️⃣ SERVER CONFIGURATION MODAL
 // =========================================================================
-interface ServerSettingsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
-
-function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProps) {
-  const [urlInput, setUrlInput] = useState(() => {
-    return window.localStorage.getItem('skillswap_backend_url') || '';
-  });
-
-  if (!isOpen) return null;
-
-  const handleSave = () => {
-    if (!urlInput.trim()) {
-      window.localStorage.removeItem('skillswap_backend_url');
-    } else {
-      let formattedUrl = urlInput.trim();
-      if (!formattedUrl.startsWith('http://') && !formattedUrl.startsWith('https://')) {
-        formattedUrl = `http://${formattedUrl}`;
-      }
-      window.localStorage.setItem('skillswap_backend_url', formattedUrl);
-    }
-    window.location.reload();
-  };
-
-  const handleReset = () => {
-    window.localStorage.removeItem('skillswap_backend_url');
-    window.location.reload();
-  };
-
-  return (
-    <div style={{
-      position: 'absolute',
-      inset: 0,
-      backgroundColor: 'rgba(9, 8, 14, 0.85)',
-      backdropFilter: 'blur(8px)',
-      zIndex: 9999,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '20px',
-      animation: 'fade-in 0.3s ease'
-    }}>
-      <div style={{
-        backgroundColor: '#161426',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: '20px',
-        padding: '24px',
-        width: '100%',
-        maxWidth: '320px',
-        boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#fff', margin: 0 }}>Server Config</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}>
-            <X size={20} />
-          </button>
-        </div>
-        
-        <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px', lineHeight: 1.5, margin: 0 }}>
-          Enter a custom backend server URL (e.g. your computer's IP address or a public tunnel URL) so any mobile device can connect.
-        </p>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <label style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-            Backend Server URL
-          </label>
-          <input
-            type="text"
-            placeholder="http://192.168.0.10:3001"
-            value={urlInput}
-            onChange={(e) => setUrlInput(e.target.value)}
-            style={{
-              height: '44px',
-              backgroundColor: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(255,255,255,0.06)',
-              borderRadius: '10px',
-              padding: '0 12px',
-              color: '#fff',
-              fontSize: '13px',
-              outline: 'none'
-            }}
-          />
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '8px' }}>
-          <button onClick={handleSave} className="btn-primary" style={{ height: '44px', fontSize: '13px', width: '100%' }}>
-            Save & Reload
-          </button>
-          
-          {window.localStorage.getItem('skillswap_backend_url') && (
-            <button 
-              onClick={handleReset} 
-              style={{
-                height: '44px',
-                width: '100%',
-                borderRadius: '10px',
-                backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                border: '1px solid rgba(239, 68, 68, 0.25)',
-                color: '#EF4444',
-                fontSize: '13px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all 0.2s ease'
-              }}
-            >
-              Reset to Default
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // =========================================================================
 // 2.7️⃣ GOOGLE ACCOUNT SELECTOR MODAL
 // =========================================================================
@@ -1241,7 +1088,6 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGoogleOpen, setIsGoogleOpen] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1348,30 +1194,6 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
       position: 'relative',
       animation: 'fade-in 0.6s ease'
     }}>
-      {/* Floating Settings Gear Icon */}
-      <button 
-        onClick={() => setIsSettingsOpen(true)}
-        style={{
-          position: 'absolute',
-          top: '20px',
-          right: '20px',
-          background: 'none',
-          border: 'none',
-          color: 'rgba(255,255,255,0.4)',
-          cursor: 'pointer',
-          padding: '8px',
-          borderRadius: '50%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'all 0.2s ease',
-          backgroundColor: 'rgba(255,255,255,0.02)'
-        }}
-      >
-        <Settings size={20} />
-      </button>
-
-      <ServerSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       <GoogleAccountSelectorModal isOpen={isGoogleOpen} onClose={() => setIsGoogleOpen(false)} onSelectAccount={handleGoogleSelect} />
 
       <h2 style={{ fontSize: '28px', fontWeight: 900, color: '#fff', textAlign: 'center', marginBottom: '8px' }}>
@@ -1398,25 +1220,6 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
           gap: '8px'
         }}>
           <span>⚠️ {errorMsg}</span>
-          {errorMsg === 'Failed to connect to backend server.' && (
-            <button 
-              type="button"
-              onClick={() => setIsSettingsOpen(true)}
-              style={{
-                backgroundColor: '#F87171',
-                color: '#161426',
-                border: 'none',
-                padding: '6px 12px',
-                borderRadius: '6px',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                marginTop: '4px'
-              }}
-            >
-              Configure Server URL
-            </button>
-          )}
         </div>
       )}
 
@@ -1545,7 +1348,6 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isGoogleOpen, setIsGoogleOpen] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -1652,30 +1454,6 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
       position: 'relative',
       animation: 'fade-in 0.6s ease'
     }}>
-      {/* Floating Settings Gear Icon */}
-      <button 
-        onClick={() => setIsSettingsOpen(true)}
-        style={{
-          position: 'absolute',
-          top: '20px',
-          right: '20px',
-          background: 'none',
-          border: 'none',
-          color: 'rgba(255,255,255,0.4)',
-          cursor: 'pointer',
-          padding: '8px',
-          borderRadius: '50%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'all 0.2s ease',
-          backgroundColor: 'rgba(255,255,255,0.02)'
-        }}
-      >
-        <Settings size={20} />
-      </button>
-
-      <ServerSettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       <GoogleAccountSelectorModal isOpen={isGoogleOpen} onClose={() => setIsGoogleOpen(false)} onSelectAccount={handleGoogleSelect} />
 
       <h2 style={{ fontSize: '28px', fontWeight: 900, color: '#fff', textAlign: 'center', marginBottom: '8px' }}>
@@ -1702,25 +1480,6 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
           gap: '8px'
         }}>
           <span>⚠️ {errorMsg}</span>
-          {errorMsg === 'Failed to connect to backend server.' && (
-            <button 
-              type="button"
-              onClick={() => setIsSettingsOpen(true)}
-              style={{
-                backgroundColor: '#F87171',
-                color: '#161426',
-                border: 'none',
-                padding: '6px 12px',
-                borderRadius: '6px',
-                fontSize: '11px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                marginTop: '4px'
-              }}
-            >
-              Configure Server URL
-            </button>
-          )}
         </div>
       )}
 
