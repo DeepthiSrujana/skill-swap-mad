@@ -70,6 +70,7 @@ class _SessionsScreenState extends State<SessionsScreen> with SingleTickerProvid
           partnerId: session.partnerId,
           partnerName: session.partnerName,
           sessionTitle: session.title,
+          skill: session.skill,
         ),
       ),
     ).then((_) => _loadSessions()); // Reload list when call finishes

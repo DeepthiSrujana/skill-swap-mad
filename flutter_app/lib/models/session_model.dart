@@ -9,6 +9,7 @@ class SessionModel {
   final String time;        // Custom chosen time, e.g. "16:00"
   final String duration;    // e.g. "60 mins"
   final int sessionCount;   // e.g. 3 sessions
+  final String skill;       // e.g. "Figma" or "Flutter"
   final bool liveSoon;
   final bool isDone;
   final String status;      // 'pending' | 'accepted' | 'completed'
@@ -25,6 +26,7 @@ class SessionModel {
     required this.time,
     required this.duration,
     required this.sessionCount,
+    required this.skill,
     this.liveSoon = false,
     this.isDone = false,
     required this.status,
@@ -43,6 +45,7 @@ class SessionModel {
       time: map['time'] ?? '',
       duration: map['duration'] ?? '',
       sessionCount: map['sessionCount'] ?? 1,
+      skill: map['skill'] ?? 'General Skills',
       liveSoon: map['liveSoon'] ?? false,
       isDone: map['isDone'] ?? false,
       status: map['status'] ?? 'pending',
@@ -61,6 +64,7 @@ class SessionModel {
       'time': time,
       'duration': duration,
       'sessionCount': sessionCount,
+      'skill': skill,
       'liveSoon': liveSoon,
       'isDone': isDone,
       'status': status,

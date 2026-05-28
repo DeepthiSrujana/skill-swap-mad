@@ -8,6 +8,7 @@ class VideoCallScreen extends StatefulWidget {
   final String partnerId;
   final String partnerName;
   final String sessionTitle;
+  final String skill;
 
   const VideoCallScreen({
     super.key,
@@ -15,6 +16,7 @@ class VideoCallScreen extends StatefulWidget {
     required this.partnerId,
     required this.partnerName,
     required this.sessionTitle,
+    required this.skill,
   });
 
   @override
@@ -200,6 +202,7 @@ class _VideoCallScreenState extends State<VideoCallScreen> {
                             await _service.submitRatingAndReview(
                               widget.partnerId,
                               selectedStars.toDouble(),
+                              skill: widget.skill,
                             );
                             
                             if (mounted) {

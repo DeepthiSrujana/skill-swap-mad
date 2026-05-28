@@ -299,9 +299,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 24),
 
             // Teaches & Wants List
-            _buildSkillSection("SKILLS I CAN TEACH", user.teaches, const Color(0xFF10B981)),
+            _buildSkillSection("SKILLS I CAN TEACH", user.teaches, const Color(0xFF10B981), isTeaching: true),
             const SizedBox(height: 24),
-            _buildSkillSection("SKILLS I WANT TO LEARN", user.wants, const Color(0xFF6366F1)),
+            _buildSkillSection("SKILLS I WANT TO LEARN", user.wants, const Color(0xFF6366F1), isTeaching: false),
             const SizedBox(height: 32),
           ],
         ),
@@ -337,7 +337,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildSkillSection(String header, List<String> skills, Color chipColor) {
+  Widget _buildSkillSection(String header, List<String> skills, Color chipColor, {bool isTeaching = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -346,31 +346,102 @@ class _ProfileScreenState extends State<ProfileScreen> {
           style: const TextStyle(color: Colors.white30, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.5),
         ),
         const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: skills.isEmpty
-              ? [
-                  Text(
-                    "No skills added yet.",
-                    style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 12),
+        skills.isEmpty
+            ? Text(
+                "No skills added yet.",
+                style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 12),
+              )
+            : isTeaching
+                ? Column(
+                    children: skills.map((s) {
+                      final score = _user?.skillScores[s] ?? 90; // default simulated score
+                      final rating = _user?.skillRatings[s] ?? 0.0;
+                      final ratingText = rating > 0 ? "$rating ★" : "No reviews";
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF161426),
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.white.withOpacity(0.04)),
+                          gradient: LinearGradient(
+                            colors: [const Color(0xFF10B981).withOpacity(0.05), Colors.transparent],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  s,
+                                  style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800),
+                                ),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF10B981).withOpacity(0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        "Test Score: $score%",
+                                        style: const TextStyle(color: Color(0xFF10B981), fontSize: 10, fontWeight: FontWeight.w800),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFF59E0B).withOpacity(0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.star, color: Color(0xFFF59E0B), size: 10),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            ratingText,
+                                            style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 10, fontWeight: FontWeight.w800),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                            Icon(Icons.verified, color: const Color(0xFF10B981).withOpacity(0.8), size: 24),
+                          ],
+                        ),
+                      );
+                    }).toList(),
                   )
-                ]
-              : skills.map((s) {
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: chipColor.withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(30),
-                      border: Border.all(color: chipColor.withOpacity(0.2)),
-                    ),
-                    child: Text(
-                      s,
-                      style: TextStyle(color: chipColor, fontSize: 12, fontWeight: FontWeight.w700),
-                    ),
-                  );
-                }).toList(),
-        ),
+                : Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: skills.map((s) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: chipColor.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(30),
+                          border: Border.all(color: chipColor.withOpacity(0.2)),
+                        ),
+                        child: Text(
+                          s,
+                          style: TextStyle(color: chipColor, fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                      );
+                    }).toList(),
+                  ),
       ],
     );
   }

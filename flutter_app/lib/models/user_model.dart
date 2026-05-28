@@ -17,6 +17,9 @@ class UserModel {
   final String experience;
   final List<double> ratingsReceived;
 
+  final Map<String, int> skillScores;
+  final Map<String, double> skillRatings;
+
   UserModel({
     required this.id,
     required this.name,
@@ -35,9 +38,23 @@ class UserModel {
     this.language = 'English',
     this.experience = '1+ Years',
     this.ratingsReceived = const [],
+    this.skillScores = const {},
+    this.skillRatings = const {},
   });
 
   factory UserModel.fromMap(Map<String, dynamic> map, String docId) {
+    // Parse skillScores
+    final rawScores = map['skillScores'] ?? const {};
+    final parsedScores = Map<String, int>.from(
+      rawScores.map((k, v) => MapEntry(k.toString(), (v as num).toInt())),
+    );
+
+    // Parse skillRatings
+    final rawRatings = map['skillRatings'] ?? const {};
+    final parsedRatings = Map<String, double>.from(
+      rawRatings.map((k, v) => MapEntry(k.toString(), (v as num).toDouble())),
+    );
+
     return UserModel(
       id: docId,
       name: map['name'] ?? '',
@@ -56,6 +73,8 @@ class UserModel {
       language: map['language'] ?? 'English',
       experience: map['experience'] ?? '1+ Years',
       ratingsReceived: List<double>.from((map['ratingsReceived'] ?? const []).map((x) => x.toDouble())),
+      skillScores: parsedScores,
+      skillRatings: parsedRatings,
     );
   }
 
@@ -77,6 +96,8 @@ class UserModel {
       'language': language,
       'experience': experience,
       'ratingsReceived': ratingsReceived,
+      'skillScores': skillScores,
+      'skillRatings': skillRatings,
     };
   }
 }

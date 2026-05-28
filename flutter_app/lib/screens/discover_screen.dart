@@ -72,7 +72,6 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
 
     final sessionId = "sess_group_${DateTime.now().millisecondsSinceEpoch}";
     
-    // Create dual session documents for Firestore sync (requester and target)
     final teachesSkill = partner.teaches.isNotEmpty ? partner.teaches.first : "General Skills";
     
     final reqSession = SessionModel(
@@ -86,6 +85,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       time: "Pending",
       duration: "60 mins",
       sessionCount: 1,
+      skill: teachesSkill,
       status: "pending",
       isInbound: false,
     );
@@ -101,6 +101,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
       time: "Pending",
       duration: "60 mins",
       sessionCount: 1,
+      skill: teachesSkill,
       status: "pending",
       isInbound: true,
     );

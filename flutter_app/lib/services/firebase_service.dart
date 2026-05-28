@@ -54,6 +54,8 @@ class FirebaseService {
         ratingValue: "4.8",
         swapsCount: "12",
         ratingsReceived: [5.0, 4.0, 5.0, 5.0],
+        skillScores: const {"Figma": 95, "UI/UX Prototyping": 90},
+        skillRatings: const {"Figma": 4.8, "UI/UX Prototyping": 4.9},
       ),
       UserModel(
         id: "user_2",
@@ -66,6 +68,8 @@ class FirebaseService {
         ratingValue: "4.9",
         swapsCount: "25",
         ratingsReceived: [5.0, 5.0, 4.8, 5.0],
+        skillScores: const {"Flutter": 100, "Dart": 90, "Firebase": 95},
+        skillRatings: const {"Flutter": 4.9, "Dart": 4.8, "Firebase": 4.9},
       ),
     ]);
   }
@@ -308,7 +312,7 @@ class FirebaseService {
   }
 
   // --- RATING API ---
-  Future<void> submitRatingAndReview(String targetUserId, double score) async {
+  Future<void> submitRatingAndReview(String targetUserId, double score, {String? skill}) async {
     if (_useMock) {
       final idx = _mockUsers.indexWhere((u) => u.id == targetUserId);
       if (idx != -1) {
@@ -316,10 +320,16 @@ class FirebaseService {
         final list = List<double>.from(u.ratingsReceived)..add(score);
         final avg = list.reduce((a, b) => a + b) / list.length;
         
+        final skillRatings = Map<String, double>.from(u.skillRatings);
+        if (skill != null && skill.isNotEmpty) {
+          skillRatings[skill] = score;
+        }
+
         _mockUsers[idx] = UserModel.fromMap(
           u.toMap()
             ..['ratingsReceived'] = list
-            ..['ratingValue'] = avg.toStringAsFixed(1),
+            ..['ratingValue'] = avg.toStringAsFixed(1)
+            ..['skillRatings'] = skillRatings,
           targetUserId,
         );
       }
@@ -333,9 +343,15 @@ class FirebaseService {
       list.add(score);
       final avg = list.reduce((a, b) => a + b) / list.length;
 
+      final skillRatings = Map<String, double>.from(snap.data()?['skillRatings'] ?? {});
+      if (skill != null && skill.isNotEmpty) {
+        skillRatings[skill] = score;
+      }
+
       await docRef.update({
         'ratingsReceived': list,
         'ratingValue': avg.toStringAsFixed(1),
+        'skillRatings': skillRatings,
       });
     }
   }
