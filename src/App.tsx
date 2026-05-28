@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
 import {
   Zap,
   Users,
@@ -1254,6 +1255,46 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
     }
   };
 
+  const handleGoogleClick = async () => {
+    const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
+    if (isCapacitor) {
+      try {
+        setErrorMsg('');
+        setIsSubmitting(true);
+        console.log("[Google Auth] Initializing native signIn...");
+        const googleUser = await GoogleAuth.signIn();
+        console.log("[Google Auth] Received native user:", googleUser);
+        
+        if (googleUser && googleUser.idToken) {
+          const res = await fetch(`${API_BASE}/auth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken: googleUser.idToken })
+          });
+          
+          if (res.ok) {
+            const data = await res.json();
+            onSignUpComplete(data.token, data.user);
+          } else {
+            const data = await res.json();
+            setErrorMsg(data.error || 'Google verification failed.');
+          }
+        } else {
+          setErrorMsg('Failed to obtain Google login credentials.');
+        }
+      } catch (err: any) {
+        console.error("[Google Auth] Native error:", err);
+        if (err?.message !== 'Sign in cancelled' && err?.message !== '12501') {
+          setErrorMsg(err?.message || 'Native Google Sign-In failed.');
+        }
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      setIsGoogleOpen(true);
+    }
+  };
+
   const handleGoogleSelect = async (gEmail: string, gName: string) => {
     setErrorMsg('');
     setIsSubmitting(true);
@@ -1440,7 +1481,7 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
       <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
         <button 
           type="button"
-          onClick={() => setIsGoogleOpen(true)}
+          onClick={handleGoogleClick}
           style={{
             flex: 1,
             height: '48px',
@@ -1510,6 +1551,46 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
       setErrorMsg('Failed to connect to backend server.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleGoogleClick = async () => {
+    const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
+    if (isCapacitor) {
+      try {
+        setErrorMsg('');
+        setIsSubmitting(true);
+        console.log("[Google Auth] Initializing native signIn...");
+        const googleUser = await GoogleAuth.signIn();
+        console.log("[Google Auth] Received native user:", googleUser);
+        
+        if (googleUser && googleUser.idToken) {
+          const res = await fetch(`${API_BASE}/auth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idToken: googleUser.idToken })
+          });
+          
+          if (res.ok) {
+            const data = await res.json();
+            onSignInComplete(data.token, data.user);
+          } else {
+            const data = await res.json();
+            setErrorMsg(data.error || 'Google verification failed.');
+          }
+        } else {
+          setErrorMsg('Failed to obtain Google login credentials.');
+        }
+      } catch (err: any) {
+        console.error("[Google Auth] Native error:", err);
+        if (err?.message !== 'Sign in cancelled' && err?.message !== '12501') {
+          setErrorMsg(err?.message || 'Native Google Sign-In failed.');
+        }
+      } finally {
+        setIsSubmitting(false);
+      }
+    } else {
+      setIsGoogleOpen(true);
     }
   };
 
@@ -1677,7 +1758,7 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
       <div style={{ display: 'flex', gap: '16px', marginBottom: '24px' }}>
         <button 
           type="button"
-          onClick={() => setIsGoogleOpen(true)}
+          onClick={handleGoogleClick}
           style={{
             flex: 1,
             height: '48px',

@@ -4,4 +4,5 @@
     <string name="title_activity_main">SkillSwap</string>
     <string name="package_name">com.skillswap.app</string>
     <string name="custom_url_scheme">com.skillswap.app</string>
+    <string name="server_client_id">8779954823976-8f3bdfa06e115ec.apps.googleusercontent.com</string>
 </resources>
