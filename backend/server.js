@@ -201,8 +201,28 @@ app.post('/api/auth/signup', (req, finalRes) => {
 });
 
 // Google Authentication / Quick Signup Endpoint
-app.post('/api/auth/google', (req, finalRes) => {
-  const { email, name } = req.body;
+app.post('/api/auth/google', async (req, finalRes) => {
+  let { email, name, idToken } = req.body;
+
+  if (idToken) {
+    try {
+      console.log("[Google Auth] Verifying secure ID Token...");
+      const response = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`);
+      if (response.ok) {
+        const ticket = await response.json();
+        email = ticket.email;
+        name = ticket.name || ticket.given_name || "Google User";
+        console.log(`[Google Auth] Successfully verified token for: ${email}`);
+      } else {
+        const errorText = await response.text();
+        console.error("[Google Auth] Verification endpoint error response:", errorText);
+        return finalRes.status(400).json({ error: 'Failed to verify secure Google ID Token.' });
+      }
+    } catch (e) {
+      console.error("[Google Auth] Network error verifying secure token:", e);
+      return finalRes.status(500).json({ error: 'Google authentication service unreachable.' });
+    }
+  }
 
   if (!email || !name) {
     return finalRes.status(400).json({ error: 'Email and name are required.' });
