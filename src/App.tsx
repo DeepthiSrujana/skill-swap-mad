@@ -47,37 +47,37 @@ const getBackendUrls = () => {
     };
   }
 
-  // 2. Default fallbacks
+  // 2. Default production settings
   // @ts-ignore
   const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
   
   const currentHost = typeof window !== 'undefined' ? window.location.hostname : '';
   const isPublicTunnel = currentHost && !['localhost', '127.0.0.1', '0.0.0.0'].includes(currentHost) && !currentHost.startsWith('192.168.');
 
+  const productionUrl = 'https://skill-swap-mad.onrender.com';
+
   if (isPublicTunnel) {
-    console.log("[SkillSwap] Dynamic tunnel domain detected. Connecting to Serveo backend tunnel:", 'https://fec65d74b6536a46-49-205-147-45.serveousercontent.com');
+    console.log("[SkillSwap] Dynamic tunnel domain detected. Connecting to Render production backend:", productionUrl);
     return {
-      API_BASE: 'https://fec65d74b6536a46-49-205-147-45.serveousercontent.com/api',
-      SOCKET_URL: 'https://fec65d74b6536a46-49-205-147-45.serveousercontent.com',
+      API_BASE: `${productionUrl}/api`,
+      SOCKET_URL: productionUrl,
       FALLBACK_API_BASE: '',
       FALLBACK_SOCKET_URL: ''
     };
   }
 
   if (isCapacitor) {
-    // @ts-ignore
-    const hostIp = typeof __DEV_HOST_IP__ !== 'undefined' ? __DEV_HOST_IP__ : '10.0.2.2';
-    console.log("[SkillSwap] Running under Capacitor. Connecting to dynamic host IP:", hostIp);
+    console.log("[SkillSwap] Running under Capacitor. Connecting to Render production backend:", productionUrl);
     return {
-      API_BASE: `http://${hostIp}:3001/api`,
-      SOCKET_URL: `http://${hostIp}:3001`,
-      FALLBACK_API_BASE: 'https://fec65d74b6536a46-49-205-147-45.serveousercontent.com/api',
-      FALLBACK_SOCKET_URL: 'https://fec65d74b6536a46-49-205-147-45.serveousercontent.com'
+      API_BASE: `${productionUrl}/api`,
+      SOCKET_URL: productionUrl,
+      FALLBACK_API_BASE: '',
+      FALLBACK_SOCKET_URL: ''
     };
   }
   return {
-    API_BASE: 'http://localhost:3001/api',
-    SOCKET_URL: 'http://localhost:3001',
+    API_BASE: `${productionUrl}/api`,
+    SOCKET_URL: productionUrl,
     FALLBACK_API_BASE: '',
     FALLBACK_SOCKET_URL: ''
   };
