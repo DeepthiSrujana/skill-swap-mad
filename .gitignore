@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.idea/
+.vscode/
+*.log
+.env
+.env.local
+backend/node_modules/
+android/app/build/
+android/.gradle/
+android/local.properties
