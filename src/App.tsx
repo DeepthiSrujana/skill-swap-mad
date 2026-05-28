@@ -31,7 +31,7 @@ import {
   Search
 } from 'lucide-react';
 
-const localStorage = window.sessionStorage;
+const localStorage = window.localStorage;
 
 const getBackendUrls = () => {
   const productionUrl = 'https://skill-swap-mad.onrender.com';
@@ -1601,7 +1601,6 @@ function MainAppShell({
 
   const [notifications, setNotifications] = useState<any[]>([]);
   const [discoverSearchQuery, setDiscoverSearchQuery] = useState('');
-  const [lastActiveTab, setLastActiveTab] = useState<number>(0);
 
   // Call States: 'idle' | 'outgoing' | 'incoming' | 'connected'
   const [callStatus, setCallStatus] = useState<'idle' | 'outgoing' | 'incoming' | 'connected'>('idle');
@@ -2171,45 +2170,27 @@ function MainAppShell({
           />
         )}
         {currentTab === 1 && <DiscoverScreenView initialSearch={discoverSearchQuery} />}
-        {currentTab === 2 && <ChatScreenView socket={socket} activeUserId={activeUser?.id} activeUser={activeUser} onInitiateCall={handleInitiateCall} />}
+        {currentTab === 2 && (
+          <ChatScreenView 
+            socket={socket} 
+            activeUserId={activeUser?.id} 
+            activeUser={activeUser} 
+            onInitiateCall={handleInitiateCall} 
+            onOpenCommunity={() => {
+              setCurrentTab(5);
+            }} 
+          />
+        )}
         {currentTab === 3 && <SessionsScreenView />}
         {currentTab === 4 && <ProfileScreenView activeUser={activeUser} setActiveUser={setActiveUser} onLogout={onLogout} onStartAssessment={onStartAssessment} />}
-        {currentTab === 5 && <CommunityScreenView activeUser={activeUser} setActiveUser={setActiveUser} />}
+        {currentTab === 5 && (
+          <CommunityScreenView 
+            activeUser={activeUser} 
+            setActiveUser={setActiveUser} 
+            onClose={() => setCurrentTab(2)} 
+          />
+        )}
       </div>
-
-      {/* Floating Action Groups Button */}
-      <button 
-        onClick={() => {
-          if (currentTab === 5) {
-            setCurrentTab(lastActiveTab);
-          } else {
-            setLastActiveTab(currentTab);
-            setCurrentTab(5);
-          }
-        }}
-        style={{
-          position: 'absolute',
-          bottom: '80px',
-          right: '20px',
-          width: '46px',
-          height: '46px',
-          borderRadius: '50%',
-          backgroundColor: currentTab === 5 ? '#EF4444' : '#8B5CF6',
-          border: 'none',
-          color: 'white',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          boxShadow: currentTab === 5 ? '0 4px 16px rgba(239, 68, 68, 0.4)' : '0 4px 16px rgba(139, 92, 246, 0.4)',
-          transition: 'all 0.2s ease',
-          zIndex: 40
-        }}
-        onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.08)'}
-        onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-      >
-        {currentTab === 5 ? <X size={20} /> : <Users size={20} />}
-      </button>
 
       {/* Navigation Bar */}
       <div style={{
@@ -3325,12 +3306,14 @@ function ChatScreenView({
   socket, 
   activeUserId, 
   activeUser,
-  onInitiateCall 
+  onInitiateCall,
+  onOpenCommunity
 }: { 
   socket: Socket | null; 
   activeUserId: string; 
   activeUser: any;
   onInitiateCall: (partnerId: string, partnerName: string) => void; 
+  onOpenCommunity: () => void;
 }) {
   const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<any[]>([]);
@@ -3515,9 +3498,32 @@ function ChatScreenView({
   if (!activePartnerId) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '20px', animation: 'fade-in 0.4s ease' }}>
-        <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#fff', margin: 0 }}>
-          Messages
-        </h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: 0 }}>
+          <h3 style={{ fontSize: '20px', fontWeight: 800, color: '#fff', margin: 0 }}>
+            Messages
+          </h3>
+          <button
+            onClick={onOpenCommunity}
+            style={{
+              backgroundColor: '#8B5CF6',
+              border: 'none',
+              color: 'white',
+              borderRadius: '12px',
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 4px 12px rgba(139, 92, 246, 0.25)',
+              transition: 'all 0.2s ease'
+            }}
+          >
+            <Users size={16} />
+            Community
+          </button>
+        </div>
 
         <div style={{
           flex: 1,
@@ -3811,6 +3817,39 @@ function SessionsScreenView() {
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Rating Modal States
+  const [ratingTarget, setRatingTarget] = useState<{ userId: string; userName: string } | null>(null);
+  const [selectedRating, setSelectedRating] = useState<number>(5);
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+
+  const handleSubmitRating = async () => {
+    if (!ratingTarget) return;
+    const token = localStorage.getItem('skillswap_token');
+    if (!token) return;
+
+    setIsSubmittingRating(true);
+    try {
+      const res = await fetch(`${API_BASE}/users/rate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          targetUserId: ratingTarget.userId,
+          rating: selectedRating
+        })
+      });
+      if (res.ok) {
+        setRatingTarget(null);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSubmittingRating(false);
+    }
+  };
+
   const fetchSessions = async () => {
     const token = localStorage.getItem('skillswap_token');
     if (!token) return;
@@ -3997,6 +4036,7 @@ function SessionsScreenView() {
                 liveSoon={s.liveSoon} 
                 status="completed"
                 isDone={true} 
+                onRate={() => setRatingTarget({ userId: s.partnerId, userName: s.partnerName })}
               />
             ))
           ) : (
@@ -4004,6 +4044,93 @@ function SessionsScreenView() {
           )
         )}
       </div>
+
+      {/* Interactive Rating Modal */}
+      {ratingTarget && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          backgroundColor: 'rgba(9, 8, 14, 0.85)',
+          backdropFilter: 'blur(8px)',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '20px',
+          animation: 'fade-in 0.3s ease'
+        }}>
+          <div style={{
+            backgroundColor: '#161426',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '20px',
+            padding: '24px',
+            width: '100%',
+            maxWidth: '320px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '16px',
+            textAlign: 'center'
+          }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#fff', margin: 0 }}>
+              Rate Your Partner
+            </h3>
+            <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '12px', lineHeight: 1.5, margin: 0 }}>
+              How was your learning experience with {ratingTarget.userName}?
+            </p>
+
+            <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', margin: '10px 0' }}>
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  onClick={() => setSelectedRating(star)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    fontSize: '28px',
+                    color: star <= selectedRating ? '#F59E0B' : 'rgba(255,255,255,0.15)',
+                    cursor: 'pointer',
+                    transition: 'transform 0.1s ease'
+                  }}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
+              <button 
+                onClick={() => setRatingTarget(null)}
+                style={{
+                  flex: 1,
+                  height: '40px',
+                  borderRadius: '10px',
+                  backgroundColor: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  color: 'rgba(255,255,255,0.7)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleSubmitRating}
+                disabled={isSubmittingRating}
+                className="btn-primary"
+                style={{
+                  flex: 1,
+                  height: '40px',
+                  fontSize: '13px'
+                }}
+              >
+                {isSubmittingRating ? 'Saving...' : 'Submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
@@ -4019,7 +4146,8 @@ function SessionInfoCard({
   isInbound,
   onJoin,
   onAccept,
-  onCancel
+  onCancel,
+  onRate
 }: { 
   title: string; 
   partner: string; 
@@ -4031,6 +4159,7 @@ function SessionInfoCard({
   onJoin?: () => void;
   onAccept?: () => void;
   onCancel?: () => void;
+  onRate?: () => void;
 }) {
   return (
     <div className="glass-card" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -4141,6 +4270,26 @@ function SessionInfoCard({
               Cancel Request
             </button>
           )
+        ) : status === 'completed' ? (
+          <button 
+            onClick={onRate}
+            style={{
+              backgroundColor: '#F59E0B',
+              color: '#000',
+              border: 'none',
+              borderRadius: '8px',
+              padding: '6px 12px',
+              fontSize: '12px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              boxShadow: '0 0 10px rgba(245, 158, 11, 0.25)'
+            }}
+          >
+            ★ Rate Partner
+          </button>
         ) : !isDone && (
           <button 
             onClick={onJoin}
@@ -4276,7 +4425,7 @@ function ProfileScreenView({
   const userEmail = activeUser?.email || 'john@example.com';
   const trustScore = activeUser?.trustScore || '98%';
   const swapsDone = activeUser?.swapsCount || '0';
-  const rating = activeUser?.ratingValue || '5.0';
+  const rating = activeUser?.ratingValue || '0.0';
   const communities = activeUser?.joinedCircles?.length || 0;
 
   const teachesList = activeUser?.teaches || [];
@@ -4326,7 +4475,7 @@ function ProfileScreenView({
     e.preventDefault();
     const val = newWantInput.trim();
     if (val && !wantsList.includes(val)) {
-      onStartAssessment(val, 'wants');
+      await updateProfileSkills(teachesList, [...wantsList, val]);
     }
     setNewWantInput('');
     setIsAddingWant(false);
@@ -5177,7 +5326,15 @@ function ProfileTile({
 // =========================================================================
 // 9️⃣ COMMUNITY SCREEN VIEW (FAB Popup)
 // =========================================================================
-function CommunityScreenView({ activeUser, setActiveUser }: { activeUser: any; setActiveUser: (u: any) => void }) {
+function CommunityScreenView({ 
+  activeUser, 
+  setActiveUser,
+  onClose
+}: { 
+  activeUser: any; 
+  setActiveUser: (u: any) => void;
+  onClose: () => void;
+}) {
   const joinedCircles = activeUser?.joinedCircles || [];
 
   const handleToggleJoin = async (title: string, shouldJoin: boolean) => {
@@ -5215,7 +5372,27 @@ function CommunityScreenView({ activeUser, setActiveUser }: { activeUser: any; s
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', animation: 'fade-in 0.4s ease' }}>
-      <h3 style={{ fontSize: '20px', fontWeight: 800 }}>Community Groups</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 style={{ fontSize: '20px', fontWeight: 800, margin: 0 }}>Community Groups</h3>
+        <button 
+          onClick={onClose}
+          style={{
+            background: 'rgba(255,255,255,0.05)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            color: 'white',
+            borderRadius: '50%',
+            width: '32px',
+            height: '32px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease'
+          }}
+        >
+          <X size={16} />
+        </button>
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <h4 style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>
@@ -5844,7 +6021,7 @@ function SetupProfileScreen({
           experience,
           trustScore: '98%',
           swapsCount: '0',
-          ratingValue: '5.0'
+          ratingValue: '0.0'
         })
       });
 

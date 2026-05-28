@@ -161,7 +161,7 @@ app.post('/api/auth/signup', (req, finalRes) => {
     password: hashedPassword,
     trustScore: '98%',
     swapsCount: '0',
-    ratingValue: '5.0',
+    ratingValue: '0.0',
     communitiesCount: '0',
     bio: 'Passionate about learning and sharing knowledge. Let\'s grow together!',
     about: 'I am a new Explorer on the SkillSwap platform! Let\'s swap some cool skills.',
@@ -241,7 +241,7 @@ app.post('/api/auth/google', async (req, finalRes) => {
       password: bcrypt.hashSync(Math.random().toString(36).substring(2, 10), 10), // secure random password
       trustScore: '98%',
       swapsCount: '0',
-      ratingValue: '5.0',
+      ratingValue: '0.0',
       communitiesCount: '0',
       bio: 'Signed in with Google. Let\'s swap some cool skills!',
       about: 'I am a new Explorer on the SkillSwap platform! Let\'s swap some cool skills.',
@@ -410,6 +410,40 @@ app.put('/api/users/profile', authenticateToken, (req, finalRes) => {
   return finalRes.json(userWithoutPassword);
 });
 
+// Rate a User / Swapper
+app.post('/api/users/rate', authenticateToken, (req, finalRes) => {
+  const { targetUserId, rating } = req.body;
+  if (!targetUserId || rating === undefined) {
+    return finalRes.status(400).json({ error: 'Target User ID and rating are required.' });
+  }
+
+  const db = readDatabase();
+  const user = db.users.find(u => u.id === targetUserId);
+  if (!user) {
+    return finalRes.status(404).json({ error: 'User not found.' });
+  }
+
+  const newRatingValue = parseFloat(rating);
+  if (isNaN(newRatingValue) || newRatingValue < 1 || newRatingValue > 5) {
+    return finalRes.status(400).json({ error: 'Rating must be a number between 1 and 5.' });
+  }
+
+  if (!user.ratingsReceived) {
+    user.ratingsReceived = [];
+  }
+  user.ratingsReceived.push(newRatingValue);
+  
+  const sum = user.ratingsReceived.reduce((acc, r) => acc + r, 0);
+  const avg = sum / user.ratingsReceived.length;
+  user.ratingValue = avg.toFixed(1);
+
+  writeDatabase(db);
+  
+  console.log(`[Backend] User ${targetUserId} received a rating of ${newRatingValue}. New average: ${user.ratingValue}`);
+
+  return finalRes.json({ ratingValue: user.ratingValue });
+});
+
 // Dynamic Match Score calculation helper
 function calculateMatchScore(currentUser, targetUser) {
   if (!currentUser) return "85%";
@@ -481,6 +515,9 @@ app.get('/api/users/discover', authenticateToken, (req, finalRes) => {
       learnersCount: calculateLearnersCount(u)
     };
   });
+
+  // Sort swappers by match score descending to show best matches based on learning/teaching skills first
+  mappedSwappers.sort((a, b) => parseInt(b.matchScore, 10) - parseInt(a.matchScore, 10));
 
   return finalRes.json(mappedSwappers);
 });
@@ -801,6 +838,16 @@ app.put('/api/sessions/:id', authenticateToken, (req, finalRes) => {
 
   // If session is newly accepted, handle triggers
   if (status === 'accepted' && oldStatus === 'pending') {
+    // Increment swapsCount for both users!
+    relatedSessions.forEach(s => {
+      const userObj = db.users.find(u => u.id === s.userId);
+      if (userObj) {
+        const currentCount = parseInt(userObj.swapsCount || '0', 10);
+        userObj.swapsCount = (currentCount + 1).toString();
+        console.log(`[Backend] Incremented swapsCount for user ${userObj.id} to ${userObj.swapsCount} because swap was accepted.`);
+      }
+    });
+
     // Generate Accepted Notifications for both users
     relatedSessions.forEach(s => {
       const acceptNotif = {
