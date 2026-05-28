@@ -1299,8 +1299,13 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
         }
       } catch (err: any) {
         console.error("[Google Auth] Native error:", err);
-        if (err?.message !== 'Sign in cancelled' && err?.message !== '12501') {
-          setErrorMsg(err?.message || 'Native Google Sign-In failed.');
+        const rawMsg = err?.message || '';
+        if (rawMsg.includes('cancelled') || rawMsg.includes('12501')) {
+          setErrorMsg("Google Sign-In was cancelled. Hint: Register your debug keystore's SHA-1 fingerprint in the Google Cloud Console for package com.skillswap.app. Or, register/login instantly with any Email & Password above!");
+        } else if (rawMsg.includes('wrong') || rawMsg.includes('10') || rawMsg.includes('12500')) {
+          setErrorMsg("Google SDK error (likely SHA-1 signature mismatch). Hint: Register your debug keystore's SHA-1 fingerprint in the Google Cloud Console for package com.skillswap.app. In the meantime, you can sign up instantly using Email & Password above!");
+        } else {
+          setErrorMsg(rawMsg || 'Native Google Sign-In failed.');
         }
       } finally {
         setIsSubmitting(false);
@@ -1598,8 +1603,13 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
         }
       } catch (err: any) {
         console.error("[Google Auth] Native error:", err);
-        if (err?.message !== 'Sign in cancelled' && err?.message !== '12501') {
-          setErrorMsg(err?.message || 'Native Google Sign-In failed.');
+        const rawMsg = err?.message || '';
+        if (rawMsg.includes('cancelled') || rawMsg.includes('12501')) {
+          setErrorMsg("Google Sign-In was cancelled. Hint: Register your debug keystore's SHA-1 fingerprint in the Google Cloud Console for package com.skillswap.app. Or, register/login instantly with any Email & Password above!");
+        } else if (rawMsg.includes('wrong') || rawMsg.includes('10') || rawMsg.includes('12500')) {
+          setErrorMsg("Google SDK error (likely SHA-1 signature mismatch). Hint: Register your debug keystore's SHA-1 fingerprint in the Google Cloud Console for package com.skillswap.app. In the meantime, you can log in instantly using Email & Password above!");
+        } else {
+          setErrorMsg(rawMsg || 'Native Google Sign-In failed.');
         }
       } finally {
         setIsSubmitting(false);
