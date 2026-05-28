@@ -637,6 +637,21 @@ export default function App() {
     async function checkAutoLogin() {
       // @ts-ignore
       const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
+      
+      if (isCapacitor) {
+        try {
+          console.log("[Google Auth] Initializing native plugin options at startup...");
+          await GoogleAuth.initialize({
+            clientId: '8779954823976-8f3bdfa06e115ec.apps.googleusercontent.com',
+            scopes: ['profile', 'email'],
+            grantOfflineAccess: true
+          });
+          console.log("[Google Auth] Native plugin initialized successfully.");
+        } catch (e) {
+          console.error("[Google Auth] Error during native plugin initialization:", e);
+        }
+      }
+
       if (isCapacitor && FALLBACK_API_BASE) {
         console.log("[SkillSwap] Performing network health check on primary IP:", API_BASE);
         try {
