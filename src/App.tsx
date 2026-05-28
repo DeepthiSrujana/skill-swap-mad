@@ -1256,13 +1256,13 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
   };
 
   const handleGoogleClick = async () => {
-    const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
+    const isCapacitor = typeof window !== 'undefined' && ((window as any).Capacitor || ((window as any).parent && (window as any).parent.Capacitor));
     if (isCapacitor) {
       try {
         setErrorMsg('');
         setIsSubmitting(true);
         console.log("[Google Auth] Initializing native signIn...");
-        const googleUser = await GoogleAuth.signIn();
+        const googleUser = (await GoogleAuth.signIn()) as any;
         console.log("[Google Auth] Received native user:", googleUser);
         
         if (googleUser && googleUser.idToken) {
@@ -1555,13 +1555,13 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
   };
 
   const handleGoogleClick = async () => {
-    const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
+    const isCapacitor = typeof window !== 'undefined' && ((window as any).Capacitor || ((window as any).parent && (window as any).parent.Capacitor));
     if (isCapacitor) {
       try {
         setErrorMsg('');
         setIsSubmitting(true);
         console.log("[Google Auth] Initializing native signIn...");
-        const googleUser = await GoogleAuth.signIn();
+        const googleUser = (await GoogleAuth.signIn()) as any;
         console.log("[Google Auth] Received native user:", googleUser);
         
         if (googleUser && googleUser.idToken) {
