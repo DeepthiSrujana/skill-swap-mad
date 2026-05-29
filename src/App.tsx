@@ -1031,20 +1031,29 @@ function GoogleAccountSelectorModal({ isOpen, onClose, onSelectAccount }: Google
 interface GooglePasswordModalProps {
   isOpen: boolean;
   email: string;
+  initialName: string;
   onClose: () => void;
-  onSubmitPassword: (password: string) => void;
+  onSubmitDetails: (name: string, password: string) => void;
   isSubmitting: boolean;
 }
 
-function GooglePasswordModal({ isOpen, email, onClose, onSubmitPassword, isSubmitting }: GooglePasswordModalProps) {
+function GooglePasswordModal({ isOpen, email, initialName, onClose, onSubmitDetails, isSubmitting }: GooglePasswordModalProps) {
+  const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+
+  useEffect(() => {
+    if (isOpen) {
+      setName(initialName || '');
+      setPassword('');
+    }
+  }, [isOpen, initialName]);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!password) return;
-    onSubmitPassword(password);
+    if (!name.trim() || !password) return;
+    onSubmitDetails(name.trim(), password);
   };
 
   return (
@@ -1096,6 +1105,27 @@ function GooglePasswordModal({ isOpen, email, onClose, onSubmitPassword, isSubmi
                 fontSize: '13px',
                 outline: 'none',
                 cursor: 'not-allowed'
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Full Name</label>
+            <input 
+              required
+              type="text" 
+              placeholder="e.g. Jahnavi"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{
+                height: '40px',
+                backgroundColor: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: '10px',
+                color: '#fff',
+                padding: '0 12px',
+                fontSize: '13px',
+                outline: 'none'
               }}
             />
           </div>
@@ -1219,7 +1249,7 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
     setIsGooglePasswordOpen(true);
   };
 
-  const handleGoogleSubmitWithPassword = async (pwd: string) => {
+  const handleGoogleSubmitWithPassword = async (newName: string, pwd: string) => {
     setErrorMsg('');
     setIsSubmitting(true);
     try {
@@ -1228,7 +1258,7 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: selectedGoogleEmail,
-          name: selectedGoogleName,
+          name: newName,
           idToken: selectedGoogleIdToken || undefined,
           password: pwd
         })
@@ -1262,8 +1292,9 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
       <GooglePasswordModal 
         isOpen={isGooglePasswordOpen} 
         email={selectedGoogleEmail} 
+        initialName={selectedGoogleName}
         onClose={() => setIsGooglePasswordOpen(false)} 
-        onSubmitPassword={handleGoogleSubmitWithPassword} 
+        onSubmitDetails={handleGoogleSubmitWithPassword} 
         isSubmitting={isSubmitting} 
       />
 
@@ -1488,7 +1519,7 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
     setIsGooglePasswordOpen(true);
   };
 
-  const handleGoogleSubmitWithPassword = async (pwd: string) => {
+  const handleGoogleSubmitWithPassword = async (newName: string, pwd: string) => {
     setErrorMsg('');
     setIsSubmitting(true);
     try {
@@ -1497,7 +1528,7 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: selectedGoogleEmail,
-          name: selectedGoogleName,
+          name: newName,
           idToken: selectedGoogleIdToken || undefined,
           password: pwd
         })
@@ -1531,8 +1562,9 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
       <GooglePasswordModal 
         isOpen={isGooglePasswordOpen} 
         email={selectedGoogleEmail} 
+        initialName={selectedGoogleName}
         onClose={() => setIsGooglePasswordOpen(false)} 
-        onSubmitPassword={handleGoogleSubmitWithPassword} 
+        onSubmitDetails={handleGoogleSubmitWithPassword} 
         isSubmitting={isSubmitting} 
       />
 
@@ -1772,6 +1804,7 @@ function MainAppShell({
   const [micMuted, setMicMuted] = useState(false);
   const [videoDisabled, setVideoDisabled] = useState(false);
   const [isUsingVirtualStream, setIsUsingVirtualStream] = useState(false);
+  const [isLocalEnlarged, setIsLocalEnlarged] = useState(false);
 
   // Sync refs to avoid stale closure bugs in Socket.io event listeners
   const callStatusRef = useRef(callStatus);
@@ -1796,6 +1829,16 @@ function MainAppShell({
   const localVideoElRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoElRef = useRef<HTMLVideoElement | null>(null);
 
+  // Swap video sources when enlarged state changes
+  useEffect(() => {
+    if (localVideoElRef.current) {
+      localVideoElRef.current.srcObject = isLocalEnlarged ? remoteStreamRef.current : localStreamRef.current;
+    }
+    if (remoteVideoElRef.current) {
+      remoteVideoElRef.current.srcObject = isLocalEnlarged ? localStreamRef.current : remoteStreamRef.current;
+    }
+  }, [isLocalEnlarged]);
+
   const cleanupCall = () => {
     console.log("[WebRTC] Executing cleanupCall. Hanging up...");
     setCallStatus('idle');
@@ -1804,6 +1847,7 @@ function MainAppShell({
     setMicMuted(false);
     setVideoDisabled(false);
     setIsUsingVirtualStream(false);
+    setIsLocalEnlarged(false);
 
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
@@ -1827,24 +1871,16 @@ function MainAppShell({
   const localVideoCallbackRef = (el: HTMLVideoElement | null) => {
     localVideoElRef.current = el;
     if (el) {
-      if (localStreamRef.current) {
-        el.srcObject = localStreamRef.current;
-        console.log("[WebRTC] Attached localStream to local video element via callback ref");
-      } else {
-        el.srcObject = null;
-      }
+      el.srcObject = isLocalEnlarged ? remoteStreamRef.current : localStreamRef.current;
+      console.log("[WebRTC] Attached stream to local video element via callback ref, isLocalEnlarged:", isLocalEnlarged);
     }
   };
 
   const remoteVideoCallbackRef = (el: HTMLVideoElement | null) => {
     remoteVideoElRef.current = el;
     if (el) {
-      if (remoteStreamRef.current) {
-        el.srcObject = remoteStreamRef.current;
-        console.log("[WebRTC] Attached remoteStream to remote video element via callback ref");
-      } else {
-        el.srcObject = null;
-      }
+      el.srcObject = isLocalEnlarged ? localStreamRef.current : remoteStreamRef.current;
+      console.log("[WebRTC] Attached stream to remote video element via callback ref, isLocalEnlarged:", isLocalEnlarged);
     }
   };
 
@@ -2120,6 +2156,16 @@ function MainAppShell({
       setCallStatus('incoming');
       setCallPeerId(data.from);
       setCallPeerName(data.callerName);
+
+      // Trigger native browser notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(`Incoming Video Call! 📞`, {
+          body: `${data.callerName} is calling you on SkillSwap. Tap to accept!`,
+          icon: '/favicon.ico',
+          tag: 'incoming-call',
+          requireInteraction: true
+        });
+      }
     };
 
     const handleCallDeclined = () => {
@@ -2363,11 +2409,18 @@ function MainAppShell({
       
       const isGroup = COMMUNITY_CIRCLES.includes(msg.receiverId);
 
-      if (isGroup && 'Notification' in window && Notification.permission === 'granted') {
-        new Notification(`Group: ${msg.receiverId} 👥`, {
-          body: `${msg.senderName || 'Someone'}: ${msg.text}`,
-          icon: '/favicon.ico'
-        });
+      if ('Notification' in window && Notification.permission === 'granted') {
+        if (isGroup) {
+          new Notification(`Group: ${msg.receiverId} 👥`, {
+            body: `${msg.senderName || 'Someone'}: ${msg.text}`,
+            icon: '/favicon.ico'
+          });
+        } else {
+          new Notification(`Message from ${msg.senderName || 'Someone'} 💬`, {
+            body: msg.text,
+            icon: '/favicon.ico'
+          });
+        }
       }
     };
 
@@ -2734,14 +2787,57 @@ function MainAppShell({
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              {/* Remote Stream Frame */}
+              {/* Main Enlarged Video Frame */}
               <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-                <video 
-                  ref={remoteVideoCallbackRef} 
-                  autoPlay 
-                  playsInline 
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                />
+                {isLocalEnlarged ? (
+                  // Local user is enlarged
+                  videoDisabled ? (
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: '#1E1A3C',
+                      flexDirection: 'column',
+                      gap: '12px'
+                    }}>
+                      <div style={{
+                        width: '80px',
+                        height: '80px',
+                        borderRadius: '50%',
+                        backgroundColor: '#6366F1',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '32px',
+                        color: 'white',
+                        fontWeight: 800,
+                        boxShadow: '0 0 30px rgba(99, 102, 241, 0.3)'
+                      }}>
+                        {activeUser?.name?.substring(0, 1).toUpperCase() || 'U'}
+                      </div>
+                      <span style={{ fontSize: '13px', color: 'rgba(255,255,255,0.5)' }}>Your camera is off</span>
+                    </div>
+                  ) : (
+                    <video 
+                      ref={remoteVideoCallbackRef} 
+                      autoPlay 
+                      playsInline 
+                      muted={true} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    />
+                  )
+                ) : (
+                  // Remote user is enlarged (default)
+                  <video 
+                    ref={remoteVideoCallbackRef} 
+                    autoPlay 
+                    playsInline 
+                    muted={false} 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                  />
+                )}
 
                 {/* Call Badge label overlay */}
                 <div style={{
@@ -2758,59 +2854,80 @@ function MainAppShell({
                   zIndex: 10
                 }}>
                   <div style={{ width: '6px', height: '6px', backgroundColor: '#EF4444', borderRadius: '50%', animation: 'pulse 1s infinite' }} />
-                  <span style={{ fontSize: '10px', fontWeight: 700, color: '#fff', letterSpacing: '0.5px' }}>LIVE</span>
+                  <span style={{ fontSize: '10px', fontWeight: 700, color: '#fff', letterSpacing: '0.5px' }}>
+                    {isLocalEnlarged ? 'YOU (PREVIEW)' : 'LIVE'}
+                  </span>
                 </div>
               </div>
 
-              {/* Local Stream PIP (Picture in Picture) Frame */}
-              <div style={{
-                position: 'absolute',
-                top: '16px',
-                right: '16px',
-                width: '90px',
-                height: '130px',
-                borderRadius: '12px',
-                overflow: 'hidden',
-                backgroundColor: '#09080E',
-                border: '1px solid rgba(255,255,255,0.15)',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-                zIndex: 15
-              }}>
-                {videoDisabled ? (
-                  <div style={{
-                    width: '100%',
-                    height: '100%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    backgroundColor: '#1E1A3C',
-                    flexDirection: 'column',
-                    gap: '8px'
-                  }}>
-                    <div style={{
-                      width: '40px',
-                      height: '40px',
-                      borderRadius: '50%',
-                      backgroundColor: '#6366F1',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: '14px',
-                      color: 'white',
-                      fontWeight: 800
-                    }}>
-                      {activeUser?.name?.substring(0, 1).toUpperCase() || 'U'}
-                    </div>
-                    <VideoOff size={12} style={{ color: '#EF4444' }} />
-                  </div>
-                ) : (
+              {/* Small PIP (Picture in Picture) Frame */}
+              <div 
+                onClick={() => setIsLocalEnlarged(prev => !prev)}
+                style={{
+                  position: 'absolute',
+                  top: '16px',
+                  right: '16px',
+                  width: '90px',
+                  height: '130px',
+                  borderRadius: '12px',
+                  overflow: 'hidden',
+                  backgroundColor: '#09080E',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                  zIndex: 15,
+                  cursor: 'pointer',
+                  transition: 'transform 0.2s ease'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1.0)'}
+              >
+                {isLocalEnlarged ? (
+                  // Remote user stream is in PIP
                   <video 
                     ref={localVideoCallbackRef} 
                     autoPlay 
                     playsInline 
-                    muted 
+                    muted={false} 
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                   />
+                ) : (
+                  // Local user stream is in PIP
+                  videoDisabled ? (
+                    <div style={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: '#1E1A3C',
+                      flexDirection: 'column',
+                      gap: '8px'
+                    }}>
+                      <div style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
+                        backgroundColor: '#6366F1',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '14px',
+                        color: 'white',
+                        fontWeight: 800
+                      }}>
+                        {activeUser?.name?.substring(0, 1).toUpperCase() || 'U'}
+                      </div>
+                      <VideoOff size={12} style={{ color: '#EF4444' }} />
+                    </div>
+                  ) : (
+                    <video 
+                      ref={localVideoCallbackRef} 
+                      autoPlay 
+                      playsInline 
+                      muted={true} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    />
+                  )
                 )}
               </div>
             </div>
