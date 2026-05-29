@@ -894,16 +894,9 @@ interface GoogleAccountSelectorModalProps {
 function GoogleAccountSelectorModal({ isOpen, onClose, onSelectAccount }: GoogleAccountSelectorModalProps) {
   const [customEmail, setCustomEmail] = useState('');
   const [customName, setCustomName] = useState('');
-  const [isAddingCustom, setIsAddingCustom] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   if (!isOpen) return null;
-
-  const MOCK_ACCOUNTS = [
-    { name: 'Deepthi Zakka', email: 'zakkamdeepthi8@gmail.com' },
-    { name: 'Deepti Sharma', email: 'deepti.sharma@gmail.com' },
-    { name: 'Jahnavi Thammisetty', email: 'jahnavi.t@gmail.com' }
-  ];
 
   const handleCustomSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -954,126 +947,78 @@ function GoogleAccountSelectorModal({ isOpen, onClose, onSelectAccount }: Google
           </div>
         )}
 
-        {!isAddingCustom ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', margin: 0 }}>Choose an account to continue to SkillSwap:</p>
-            {MOCK_ACCOUNTS.map((acc, idx) => (
-              <button 
-                key={idx} 
-                onClick={() => { onSelectAccount(acc.email, acc.name); onClose(); }}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'flex-start',
-                  padding: '12px',
-                  backgroundColor: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                  borderRadius: '12px',
-                  color: '#fff',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  transition: 'all 0.2s ease',
-                  width: '100%'
-                }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.06)'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.03)'}
-              >
-                <span style={{ fontSize: '13px', fontWeight: 700 }}>{acc.name}</span>
-                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>{acc.email}</span>
-              </button>
-            ))}
-            <button 
-              onClick={() => setIsAddingCustom(true)}
+        <form onSubmit={handleCustomSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Google Name</label>
+            <input 
+              required
+              type="text" 
+              placeholder="e.g. Jahnavi"
+              value={customName}
+              onChange={(e) => setCustomName(e.target.value)}
               style={{
-                padding: '12px',
-                backgroundColor: 'rgba(99, 102, 241, 0.08)',
-                border: '1px dashed rgba(99, 102, 241, 0.3)',
-                borderRadius: '12px',
-                color: '#6366F1',
+                height: '40px',
+                backgroundColor: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: '10px',
+                color: '#fff',
+                padding: '0 12px',
+                fontSize: '13px',
+                outline: 'none'
+              }}
+            />
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Google Email</label>
+            <input 
+              required
+              type="email" 
+              placeholder="e.g. jahnavi@gmail.com"
+              value={customEmail}
+              onChange={(e) => setCustomEmail(e.target.value)}
+              style={{
+                height: '40px',
+                backgroundColor: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: '10px',
+                color: '#fff',
+                padding: '0 12px',
+                fontSize: '13px',
+                outline: 'none'
+              }}
+            />
+          </div>
+          <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+            <button 
+              type="button" 
+              onClick={onClose}
+              style={{
+                flex: 1,
+                height: '40px',
+                borderRadius: '10px',
+                backgroundColor: 'transparent',
+                border: '1px solid rgba(255,255,255,0.08)',
+                color: 'rgba(255,255,255,0.6)',
                 cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: '12px',
-                width: '100%',
-                textAlign: 'center'
+                fontSize: '13px'
               }}
             >
-              + Use another account
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              className="btn-primary"
+              style={{
+                flex: 1,
+                height: '40px',
+                fontSize: '13px',
+                boxShadow: 'none'
+              }}
+            >
+              Next
             </button>
           </div>
-        ) : (
-          <form onSubmit={handleCustomSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Google Name</label>
-              <input 
-                required
-                type="text" 
-                placeholder="Deepti Sharma"
-                value={customName}
-                onChange={(e) => setCustomName(e.target.value)}
-                style={{
-                  height: '40px',
-                  backgroundColor: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                  borderRadius: '10px',
-                  color: '#fff',
-                  padding: '0 12px',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Google Email</label>
-              <input 
-                required
-                type="email" 
-                placeholder="deepti@gmail.com"
-                value={customEmail}
-                onChange={(e) => setCustomEmail(e.target.value)}
-                style={{
-                  height: '40px',
-                  backgroundColor: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.06)',
-                  borderRadius: '10px',
-                  color: '#fff',
-                  padding: '0 12px',
-                  fontSize: '13px',
-                  outline: 'none'
-                }}
-              />
-            </div>
-            <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
-              <button 
-                type="button" 
-                onClick={() => setIsAddingCustom(false)}
-                style={{
-                  flex: 1,
-                  height: '40px',
-                  borderRadius: '10px',
-                  backgroundColor: 'transparent',
-                  border: '1px solid rgba(255,255,255,0.08)',
-                  color: 'rgba(255,255,255,0.6)',
-                  cursor: 'pointer',
-                  fontSize: '13px'
-                }}
-              >
-                Back
-              </button>
-              <button 
-                type="submit" 
-                className="btn-primary"
-                style={{
-                  flex: 1,
-                  height: '40px',
-                  fontSize: '13px',
-                  boxShadow: 'none'
-                }}
-              >
-                Next
-              </button>
-            </div>
-          </form>
-        )}
+        </form>
       </div>
     </div>
   );
@@ -1082,6 +1027,123 @@ function GoogleAccountSelectorModal({ isOpen, onClose, onSelectAccount }: Google
 // =========================================================================
 // 3️⃣ SIGN UP SCREEN
 // =========================================================================
+
+interface GooglePasswordModalProps {
+  isOpen: boolean;
+  email: string;
+  onClose: () => void;
+  onSubmitPassword: (password: string) => void;
+  isSubmitting: boolean;
+}
+
+function GooglePasswordModal({ isOpen, email, onClose, onSubmitPassword, isSubmitting }: GooglePasswordModalProps) {
+  const [password, setPassword] = useState('');
+
+  if (!isOpen) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password) return;
+    onSubmitPassword(password);
+  };
+
+  return (
+    <div style={{
+      position: 'absolute',
+      inset: 0,
+      backgroundColor: 'rgba(9, 8, 14, 0.85)',
+      backdropFilter: 'blur(8px)',
+      zIndex: 9999,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '20px',
+      animation: 'fade-in 0.3s ease'
+    }}>
+      <div style={{
+        backgroundColor: '#161426',
+        border: '1px solid rgba(255,255,255,0.08)',
+        borderRadius: '20px',
+        padding: '24px',
+        width: '100%',
+        maxWidth: '320px',
+        boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#fff', margin: 0 }}>Create Google Account</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}>
+            <X size={20} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Selected Email</label>
+            <input 
+              disabled
+              type="text" 
+              value={email}
+              style={{
+                height: '40px',
+                backgroundColor: 'rgba(255,255,255,0.02)',
+                border: '1px solid rgba(255,255,255,0.04)',
+                borderRadius: '10px',
+                color: 'rgba(255,255,255,0.5)',
+                padding: '0 12px',
+                fontSize: '13px',
+                outline: 'none',
+                cursor: 'not-allowed'
+              }}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+            <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Choose Password</label>
+            <input 
+              required
+              type="password" 
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={{
+                height: '40px',
+                backgroundColor: 'rgba(255,255,255,0.03)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: '10px',
+                color: '#fff',
+                padding: '0 12px',
+                fontSize: '13px',
+                outline: 'none'
+              }}
+            />
+          </div>
+
+          <button 
+            type="submit" 
+            disabled={isSubmitting}
+            className="btn-primary"
+            style={{
+              height: '40px',
+              borderRadius: '10px',
+              fontSize: '13px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              marginTop: '6px',
+              width: '100%',
+              boxShadow: 'none'
+            }}
+          >
+            {isSubmitting ? 'Creating Account...' : 'Continue'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (token: string, user: any) => void; onLoginRoute: () => void }) {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -1089,6 +1151,10 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleOpen, setIsGoogleOpen] = useState(false);
+  const [selectedGoogleEmail, setSelectedGoogleEmail] = useState('');
+  const [selectedGoogleName, setSelectedGoogleName] = useState('');
+  const [selectedGoogleIdToken, setSelectedGoogleIdToken] = useState('');
+  const [isGooglePasswordOpen, setIsGooglePasswordOpen] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1127,19 +1193,10 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
         console.log("[Google Auth] Received native user:", googleUser);
         
         if (googleUser && googleUser.idToken) {
-          const res = await fetch(`${API_BASE}/auth/google`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idToken: googleUser.idToken })
-          });
-          
-          if (res.ok) {
-            const data = await res.json();
-            onSignUpComplete(data.token, data.user);
-          } else {
-            const data = await res.json();
-            setErrorMsg(data.error || 'Google verification failed.');
-          }
+          setSelectedGoogleEmail(googleUser.email || '');
+          setSelectedGoogleName(googleUser.name || 'Google User');
+          setSelectedGoogleIdToken(googleUser.idToken || '');
+          setIsGooglePasswordOpen(true);
         } else {
           setErrorMsg('Failed to obtain Google login credentials.');
         }
@@ -1156,16 +1213,29 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
   };
 
   const handleGoogleSelect = async (gEmail: string, gName: string) => {
+    setSelectedGoogleEmail(gEmail);
+    setSelectedGoogleName(gName);
+    setSelectedGoogleIdToken('');
+    setIsGooglePasswordOpen(true);
+  };
+
+  const handleGoogleSubmitWithPassword = async (pwd: string) => {
     setErrorMsg('');
     setIsSubmitting(true);
     try {
       const res = await fetch(`${API_BASE}/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: gEmail, name: gName })
+        body: JSON.stringify({
+          email: selectedGoogleEmail,
+          name: selectedGoogleName,
+          idToken: selectedGoogleIdToken || undefined,
+          password: pwd
+        })
       });
       const data = await res.json();
       if (res.ok) {
+        setIsGooglePasswordOpen(false);
         onSignUpComplete(data.token, data.user);
       } else {
         setErrorMsg(data.error || 'Google login failed.');
@@ -1189,6 +1259,13 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
       animation: 'fade-in 0.6s ease'
     }}>
       <GoogleAccountSelectorModal isOpen={isGoogleOpen} onClose={() => setIsGoogleOpen(false)} onSelectAccount={handleGoogleSelect} />
+      <GooglePasswordModal 
+        isOpen={isGooglePasswordOpen} 
+        email={selectedGoogleEmail} 
+        onClose={() => setIsGooglePasswordOpen(false)} 
+        onSubmitPassword={handleGoogleSubmitWithPassword} 
+        isSubmitting={isSubmitting} 
+      />
 
       <h2 style={{ fontSize: '28px', fontWeight: 900, color: '#fff', textAlign: 'center', marginBottom: '8px' }}>
         Create Account
@@ -1343,6 +1420,10 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGoogleOpen, setIsGoogleOpen] = useState(false);
+  const [selectedGoogleEmail, setSelectedGoogleEmail] = useState('');
+  const [selectedGoogleName, setSelectedGoogleName] = useState('');
+  const [selectedGoogleIdToken, setSelectedGoogleIdToken] = useState('');
+  const [isGooglePasswordOpen, setIsGooglePasswordOpen] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1381,19 +1462,10 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
         console.log("[Google Auth] Received native user:", googleUser);
         
         if (googleUser && googleUser.idToken) {
-          const res = await fetch(`${API_BASE}/auth/google`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idToken: googleUser.idToken })
-          });
-          
-          if (res.ok) {
-            const data = await res.json();
-            onSignInComplete(data.token, data.user);
-          } else {
-            const data = await res.json();
-            setErrorMsg(data.error || 'Google verification failed.');
-          }
+          setSelectedGoogleEmail(googleUser.email || '');
+          setSelectedGoogleName(googleUser.name || 'Google User');
+          setSelectedGoogleIdToken(googleUser.idToken || '');
+          setIsGooglePasswordOpen(true);
         } else {
           setErrorMsg('Failed to obtain Google login credentials.');
         }
@@ -1410,16 +1482,29 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
   };
 
   const handleGoogleSelect = async (gEmail: string, gName: string) => {
+    setSelectedGoogleEmail(gEmail);
+    setSelectedGoogleName(gName);
+    setSelectedGoogleIdToken('');
+    setIsGooglePasswordOpen(true);
+  };
+
+  const handleGoogleSubmitWithPassword = async (pwd: string) => {
     setErrorMsg('');
     setIsSubmitting(true);
     try {
       const res = await fetch(`${API_BASE}/auth/google`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: gEmail, name: gName })
+        body: JSON.stringify({
+          email: selectedGoogleEmail,
+          name: selectedGoogleName,
+          idToken: selectedGoogleIdToken || undefined,
+          password: pwd
+        })
       });
       const data = await res.json();
       if (res.ok) {
+        setIsGooglePasswordOpen(false);
         onSignInComplete(data.token, data.user);
       } else {
         setErrorMsg(data.error || 'Google login failed.');
@@ -1443,6 +1528,13 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
       animation: 'fade-in 0.6s ease'
     }}>
       <GoogleAccountSelectorModal isOpen={isGoogleOpen} onClose={() => setIsGoogleOpen(false)} onSelectAccount={handleGoogleSelect} />
+      <GooglePasswordModal 
+        isOpen={isGooglePasswordOpen} 
+        email={selectedGoogleEmail} 
+        onClose={() => setIsGooglePasswordOpen(false)} 
+        onSubmitPassword={handleGoogleSubmitWithPassword} 
+        isSubmitting={isSubmitting} 
+      />
 
       <h2 style={{ fontSize: '28px', fontWeight: 900, color: '#fff', textAlign: 'center', marginBottom: '8px' }}>
         Welcome Back
@@ -1595,6 +1687,16 @@ function MainAppShell({
   const [ratingTarget, setRatingTarget] = useState<{ userId: string; userName: string } | null>(null);
   const [selectedRating, setSelectedRating] = useState<number>(5);
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
+  const [ratingSessionId, setRatingSessionId] = useState<string | null>(null);
+  const [sessionRefreshTrigger, setSessionRefreshTrigger] = useState(0);
+
+  // Camera Facing Mode States
+  const [facingMode, setFacingMode] = useState<'user' | 'environment'>('user');
+  const facingModeRef = useRef<'user' | 'environment'>('user');
+
+  useEffect(() => {
+    facingModeRef.current = facingMode;
+  }, [facingMode]);
 
   const handleSubmitRating = async () => {
     if (!ratingTarget) return;
@@ -1614,8 +1716,47 @@ function MainAppShell({
           rating: selectedRating
         })
       });
+      
+      if (res.ok && ratingSessionId) {
+        // Calculate IST completed time
+        const formatIST = () => {
+          try {
+            const options: Intl.DateTimeFormatOptions = { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: true };
+            const timeString = new Date().toLocaleTimeString('en-US', options).toLowerCase();
+            return `completed at ${timeString} IST`;
+          } catch (e) {
+            const now = new Date();
+            const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const istTime = new Date(utc + (3600000 * 5.5));
+            let hours = istTime.getHours();
+            const minutes = String(istTime.getMinutes()).padStart(2, '0');
+            const ampm = hours >= 12 ? 'pm' : 'am';
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+            return `completed at ${hours}:${minutes} ${ampm} IST`;
+          }
+        };
+        const completedAtIST = formatIST();
+
+        await fetch(`${API_BASE}/sessions/${ratingSessionId}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            status: 'completed',
+            isDone: true,
+            isRated: true,
+            completedAt: completedAtIST
+          })
+        });
+      }
+
       if (res.ok) {
         setRatingTarget(null);
+        setRatingSessionId(null);
+        setSessionRefreshTrigger(prev => prev + 1);
       }
     } catch (err) {
       console.error(err);
@@ -1797,15 +1938,14 @@ function MainAppShell({
     return new MediaStream(tracks);
   };
 
-  const getUserMediaWithFallback = async (preferVirtual: boolean = false): Promise<{ stream: MediaStream; isVirtual: boolean }> => {
-    if (preferVirtual) {
-      return { stream: getVirtualCanvasStream(), isVirtual: true };
-    }
-
+  const getUserMediaWithFallback = async (currentFacingMode: 'user' | 'environment'): Promise<{ stream: MediaStream; isVirtual: boolean }> => {
     // 1. Try camera and microphone
     try {
-      console.log("[WebRTC] Fallback Chain - Stage 1: Requesting camera + mic...");
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      console.log(`[WebRTC] Fallback Chain - Stage 1: Requesting camera (${currentFacingMode}) + mic...`);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: currentFacingMode },
+        audio: true
+      });
       console.log("[WebRTC] Fallback Chain - Stage 1: Success!");
       return { stream, isVirtual: false };
     } catch (err) {
@@ -1814,8 +1954,11 @@ function MainAppShell({
 
     // 2. Try camera only
     try {
-      console.log("[WebRTC] Fallback Chain - Stage 2: Requesting camera only...");
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      console.log(`[WebRTC] Fallback Chain - Stage 2: Requesting camera (${currentFacingMode}) only...`);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: currentFacingMode },
+        audio: false
+      });
       console.log("[WebRTC] Fallback Chain - Stage 2: Success! Adding silent audio track.");
       const silentAudio = getSilentAudioTrack();
       if (silentAudio) {
@@ -1847,21 +1990,17 @@ function MainAppShell({
   };
 
   const getMediaStream = async (): Promise<MediaStream> => {
-    const { stream, isVirtual } = await getUserMediaWithFallback(isUsingVirtualStreamRef.current);
-    if (isVirtual !== isUsingVirtualStream) {
-      setIsUsingVirtualStream(isVirtual);
-    }
+    const { stream } = await getUserMediaWithFallback(facingModeRef.current);
     return stream;
   };
 
-  const switchLocalVideoSource = async (toVirtual: boolean) => {
-    console.log("[WebRTC] Switching local video source. toVirtual:", toVirtual);
-    const { stream: newStream, isVirtual } = await getUserMediaWithFallback(toVirtual);
-    
-    if (isVirtual !== isUsingVirtualStream) {
-      setIsUsingVirtualStream(isVirtual);
-    }
+  const handleFlipCamera = async () => {
+    const nextFacingMode = facingModeRef.current === 'user' ? 'environment' : 'user';
+    setFacingMode(nextFacingMode);
+    facingModeRef.current = nextFacingMode;
+    console.log("[WebRTC] Flipping camera. Next facingMode:", nextFacingMode);
 
+    const { stream: newStream } = await getUserMediaWithFallback(nextFacingMode);
     const newVideoTrack = newStream.getVideoTracks()[0];
     if (!newVideoTrack) return;
 
@@ -1889,13 +2028,15 @@ function MainAppShell({
       if (videoSender) {
         try {
           await videoSender.replaceTrack(newVideoTrack);
-          console.log("[WebRTC] Successfully replaced sender track!");
+          console.log("[WebRTC] Successfully replaced sender track for flipped camera!");
         } catch (e) {
-          console.error("[WebRTC] Failed to replace track:", e);
+          console.error("[WebRTC] Failed to replace track on flip:", e);
         }
       }
     }
   };
+
+
 
   const setupWebRTCPeer = async (isInitiator: boolean, offerData?: any, peerIdOverride?: string) => {
     const targetPeerId = peerIdOverride || callPeerIdRef.current;
@@ -2096,13 +2237,147 @@ function MainAppShell({
     }
   };
 
-  const handleToggleVirtualStream = () => {
-    const nextState = !isUsingVirtualStream;
-    setIsUsingVirtualStream(nextState);
-    switchLocalVideoSource(nextState);
-  };
 
-  // Listen to real-time notification events
+
+  // 1. Native browser Notification Permission request
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  // 2. Native notification permission trigger when activeUser updates
+  useEffect(() => {
+    if (activeUser && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
+  }, [activeUser]);
+
+  // 3. Keep track of already notified session IDs to avoid spamming
+  const notifiedSessionsRef = useRef<Set<string>>(new Set());
+
+  // 4. Background checker for upcoming session alarms (every 30 seconds)
+  useEffect(() => {
+    const parseSessionDate = (dateStr: string): Date | null => {
+      if (!dateStr || dateStr.includes('Pending') || dateStr.includes('completed') || dateStr.includes('Completed')) {
+        return null;
+      }
+      
+      const now = new Date();
+      let targetDate = new Date();
+      
+      if (dateStr.toLowerCase().startsWith('today')) {
+        // Format: "Today, 5:30 PM"
+        const parts = dateStr.split(',');
+        if (parts.length < 2) return null;
+        const timePart = parts[1].trim();
+        
+        const timeMatch = timePart.match(/(\d+):(\d+)\s*(AM|PM)?/i);
+        if (!timeMatch) return null;
+        
+        let hours = parseInt(timeMatch[1], 10);
+        const minutes = parseInt(timeMatch[2], 10);
+        const ampm = timeMatch[3];
+        
+        if (ampm) {
+          if (ampm.toUpperCase() === 'PM' && hours < 12) hours += 12;
+          if (ampm.toUpperCase() === 'AM' && hours === 12) hours = 0;
+        }
+        
+        targetDate.setHours(hours, minutes, 0, 0);
+        return targetDate;
+      } else {
+        // Format: "May 29, 2:00 PM"
+        const currentYear = now.getFullYear();
+        const cleanStr = dateStr.replace(/(\w+)\s+(\d+),/, `$1 $2, ${currentYear}`);
+        const parsed = Date.parse(cleanStr);
+        if (!isNaN(parsed)) {
+          return new Date(parsed);
+        }
+      }
+      return null;
+    };
+
+    const checkUpcomingSessions = async () => {
+      const token = localStorage.getItem('skillswap_token');
+      if (!token) return;
+
+      try {
+        const res = await fetch(`${API_BASE}/sessions`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const sessions = await res.json();
+          const now = new Date();
+          sessions.forEach((s: any) => {
+            if (s.status === 'accepted' && !s.isDone) {
+              const sessDate = parseSessionDate(s.date);
+              if (sessDate) {
+                const diffMs = sessDate.getTime() - now.getTime();
+                const diffMins = diffMs / 60000;
+                
+                // Alert if session starts in <= 10 mins and has not been notified yet
+                if (diffMins > -5 && diffMins <= 10 && !notifiedSessionsRef.current.has(s.id)) {
+                  notifiedSessionsRef.current.add(s.id);
+                  
+                  if ('Notification' in window && Notification.permission === 'granted') {
+                    let alertMsg = `Your session "${s.title}" is starting soon at ${s.date}!`;
+                    if (diffMins <= 0) {
+                      alertMsg = `Your session "${s.title}" is starting now!`;
+                    }
+                    new Notification("Session Alert! 📅", {
+                      body: alertMsg,
+                      icon: '/favicon.ico'
+                    });
+                  }
+                }
+              }
+            }
+          });
+        }
+      } catch (err) {
+        console.error("Error parsing upcoming sessions alarm:", err);
+      }
+    };
+
+    // Run immediately on activeUser change/mount, then every 30 seconds
+    checkUpcomingSessions();
+    const timer = setInterval(checkUpcomingSessions, 30000);
+    return () => clearInterval(timer);
+  }, [activeUser]);
+
+  // 5. Global socket message listener for community group chats
+  useEffect(() => {
+    if (!socket || !activeUser) return;
+
+    const handleGlobalMessageNotification = (msg: any) => {
+      // Avoid showing alert for messages sent by the logged-in user
+      if (msg.senderId === activeUser.id) return;
+
+      const COMMUNITY_CIRCLES = [
+        "Bengaluru Guitar Circle",
+        "Python Learners India",
+        "Design & Figma Swappers",
+        "Wellness & Yoga Exchange"
+      ];
+      
+      const isGroup = COMMUNITY_CIRCLES.includes(msg.receiverId);
+
+      if (isGroup && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification(`Group: ${msg.receiverId} 👥`, {
+          body: `${msg.senderName || 'Someone'}: ${msg.text}`,
+          icon: '/favicon.ico'
+        });
+      }
+    };
+
+    socket.on('message', handleGlobalMessageNotification);
+    return () => {
+      socket.off('message', handleGlobalMessageNotification);
+    };
+  }, [socket, activeUser]);
+
+  // 6. Listen to real-time socket notification events and display native system alerts
   useEffect(() => {
     if (!socket) return;
 
@@ -2112,6 +2387,14 @@ function MainAppShell({
         if (prev.some(n => n.id === notif.id)) return prev;
         return [notif, ...prev];
       });
+
+      // Show native system browser notification
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification(notif.title || "New Notification! 🚀", {
+          body: notif.message || "",
+          icon: '/favicon.ico'
+        });
+      }
     };
 
     socket.on('notification', handleNewNotification);
@@ -2206,7 +2489,11 @@ function MainAppShell({
         {currentTab === 3 && (
           <SessionsScreenView 
             onJoinSessionRoom={(s) => setActiveSessionRoom(s)}
-            onRateSession={(target) => setRatingTarget(target)}
+            onRateSession={(target, sessionId) => {
+              setRatingTarget(target);
+              setRatingSessionId(sessionId);
+            }}
+            refreshTrigger={sessionRefreshTrigger}
           />
         )}
         {currentTab === 4 && (
@@ -2271,14 +2558,16 @@ function MainAppShell({
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                   },
-                  body: JSON.stringify({ status: 'completed', isDone: true })
+                  body: JSON.stringify({ status: 'completed', isDone: false, isRated: false })
                 });
               } catch (e) {
                 console.error(e);
               }
             }
             setRatingTarget(ratingTargetObj);
+            setRatingSessionId(activeSessionRoom.id);
             setActiveSessionRoom(null);
+            setSessionRefreshTrigger(prev => prev + 1);
           }}
         />
       )}
@@ -2592,23 +2881,23 @@ function MainAppShell({
                 </button>
 
                 <button 
-                  onClick={handleToggleVirtualStream}
+                  onClick={handleFlipCamera}
                   style={{
                     width: '52px',
                     height: '52px',
                     borderRadius: '50%',
-                    backgroundColor: isUsingVirtualStream ? 'rgba(99, 102, 241, 0.2)' : 'rgba(255,255,255,0.06)',
-                    border: isUsingVirtualStream ? '1px solid #6366F1' : '1px solid rgba(255,255,255,0.1)',
-                    color: isUsingVirtualStream ? '#6366F1' : '#fff',
+                    backgroundColor: 'rgba(255,255,255,0.06)',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    color: '#fff',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
                     transition: 'all 0.2s ease'
                   }}
-                  title="Toggle Virtual Canvas Stream"
+                  title="Flip Camera"
                 >
-                  <Sparkles size={20} />
+                  <RefreshCw size={20} />
                 </button>
               </>
             )}
@@ -3970,10 +4259,12 @@ function ChatScreenView({
 // =========================================================================
 function SessionsScreenView({ 
   onJoinSessionRoom,
-  onRateSession
+  onRateSession,
+  refreshTrigger
 }: { 
   onJoinSessionRoom: (s: any) => void;
-  onRateSession: (target: { userId: string; userName: string }) => void;
+  onRateSession: (target: { userId: string; userName: string }, sessionId: string) => void;
+  refreshTrigger?: number;
 }) {
   const [activeSubTab, setActiveSubTab] = useState(0); // 0: Pending, 1: Upcoming, 2: Completed
   const [sessions, setSessions] = useState<any[]>([]);
@@ -4000,7 +4291,7 @@ function SessionsScreenView({
 
   useEffect(() => {
     fetchSessions();
-  }, []);
+  }, [refreshTrigger]);
 
   const handleAcceptSession = async (sessionId: string) => {
     const token = localStorage.getItem('skillswap_token');
@@ -4043,8 +4334,8 @@ function SessionsScreenView({
   };
 
   const pendingSessions = sessions.filter(s => s.status === 'pending' && !s.isDone);
-  const upcomingSessions = sessions.filter(s => s.status === 'accepted' && !s.isDone);
-  const completedSessions = sessions.filter(s => s.isDone || s.status === 'completed');
+  const upcomingSessions = sessions.filter(s => s.status === 'accepted' || (s.status === 'completed' && !s.isRated));
+  const completedSessions = sessions.filter(s => s.status === 'completed' && s.isRated);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', animation: 'fade-in 0.4s ease' }}>
@@ -4132,6 +4423,7 @@ function SessionsScreenView({
                 liveSoon={s.liveSoon} 
                 status={s.status}
                 onJoin={() => onJoinSessionRoom(s)}
+                onRate={() => onRateSession({ userId: s.partnerId, userName: s.partnerName }, s.id)}
               />
             ))
           ) : (
@@ -4144,11 +4436,11 @@ function SessionsScreenView({
                 key={s.id}
                 title={s.title} 
                 partner={s.partnerName} 
-                date={s.date} 
+                date={s.completedAt ? s.completedAt : s.date} 
                 liveSoon={s.liveSoon} 
                 status="completed"
                 isDone={true} 
-                onRate={() => onRateSession({ userId: s.partnerId, userName: s.partnerName })}
+                onRate={() => onRateSession({ userId: s.partnerId, userName: s.partnerName }, s.id)}
               />
             ))
           ) : (
@@ -6315,7 +6607,7 @@ function ActiveSessionRoom({
     const token = window.localStorage.getItem('skillswap_token');
     if (!token) return;
     try {
-      const res = await fetch(`https://skill-swap-mad.onrender.com/api/chats/${session.partnerId}`, {
+      const res = await fetch(`${API_BASE}/chats/${session.partnerId}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) {
@@ -6342,7 +6634,7 @@ function ActiveSessionRoom({
     setInputVal("");
 
     try {
-      await fetch(`https://skill-swap-mad.onrender.com/api/chats/${session.partnerId}`, {
+      await fetch(`${API_BASE}/chats/${session.partnerId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

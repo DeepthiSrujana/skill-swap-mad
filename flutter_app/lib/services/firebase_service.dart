@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import '../models/session_model.dart';
@@ -31,9 +32,12 @@ class FirebaseService {
   // Initialize service & seed demo data for instant out-of-the-box preview
   Future<void> initialize() async {
     try {
-      // Check if Firebase is running
-      // If initialized, set _useMock to false
-      _useMock = false;
+      if (Firebase.apps.isNotEmpty) {
+        _useMock = false;
+      } else {
+        _useMock = true;
+        _seedDemoData();
+      }
     } catch (e) {
       _useMock = true;
       _seedDemoData();

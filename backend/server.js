@@ -202,7 +202,7 @@ app.post('/api/auth/signup', (req, finalRes) => {
 
 // Google Authentication / Quick Signup Endpoint
 app.post('/api/auth/google', async (req, finalRes) => {
-  let { email, name, idToken } = req.body;
+  let { email, name, idToken, password } = req.body;
 
   if (idToken) {
     try {
@@ -232,13 +232,23 @@ app.post('/api/auth/google', async (req, finalRes) => {
   let user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
   let status = 200;
 
+  if (user) {
+    if (password) {
+      const passwordMatch = bcrypt.compareSync(password, user.password);
+      if (!passwordMatch) {
+        return finalRes.status(400).json({ error: 'Incorrect password for this account.' });
+      }
+    }
+  }
+
   if (!user) {
+    const userPassword = password ? bcrypt.hashSync(password, 10) : bcrypt.hashSync(Math.random().toString(36).substring(2, 10), 10);
     // Automatically create a new user profile with Google credentials
     user = {
       id: Date.now().toString(),
       name,
       email: email.toLowerCase(),
-      password: bcrypt.hashSync(Math.random().toString(36).substring(2, 10), 10), // secure random password
+      password: userPassword,
       trustScore: '98%',
       swapsCount: '0',
       ratingValue: '0.0',
@@ -836,7 +846,7 @@ app.put('/api/sessions/:id', authenticateToken, (req, finalRes) => {
   }
 
   const session = db.sessions[sessionIndex];
-  const { isDone, liveSoon, date, status, isInbound } = req.body;
+  const { isDone, liveSoon, date, status, isInbound, isRated, completedAt } = req.body;
 
   const oldStatus = session.status;
   const groupId = session.groupId;
@@ -847,6 +857,8 @@ app.put('/api/sessions/:id', authenticateToken, (req, finalRes) => {
   relatedSessions.forEach(s => {
     if (isDone !== undefined) s.isDone = isDone;
     if (liveSoon !== undefined) s.liveSoon = liveSoon;
+    if (isRated !== undefined) s.isRated = isRated;
+    if (completedAt !== undefined) s.completedAt = completedAt;
     
     if (status !== undefined) {
       s.status = status;
