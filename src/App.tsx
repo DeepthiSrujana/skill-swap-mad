@@ -43,14 +43,11 @@ const getBackendUrls = () => {
   const devHostIp = typeof __DEV_HOST_IP__ !== 'undefined' ? __DEV_HOST_IP__ : '';
 
   if (isCapacitor) {
-    const devIpUrl = devHostIp ? `http://${devHostIp}:3001` : '';
-    const emulatorUrl = `http://10.0.2.2:3001`;
-
     return {
-      API_BASE: devIpUrl ? `${devIpUrl}/api` : `${emulatorUrl}/api`,
-      SOCKET_URL: devIpUrl || emulatorUrl,
-      FALLBACK_API_BASE: devIpUrl ? `${emulatorUrl}/api` : `${productionUrl}/api`,
-      FALLBACK_SOCKET_URL: devIpUrl ? emulatorUrl : productionUrl
+      API_BASE: `${productionUrl}/api`,
+      SOCKET_URL: productionUrl,
+      FALLBACK_API_BASE: `${productionUrl}/api`,
+      FALLBACK_SOCKET_URL: productionUrl
     };
   }
 
@@ -664,51 +661,54 @@ export default function App() {
         } catch (e) {
           console.error("[Google Auth] Error during native plugin initialization:", e);
         }
-      }
 
-      if (isCapacitor) {
-        // @ts-ignore
-        const devHostIp = typeof __DEV_HOST_IP__ !== 'undefined' ? __DEV_HOST_IP__ : '';
-        const potentialUrls = [
-          `http://localhost:3001`,
-          devHostIp ? `http://${devHostIp}:3001` : '',
-          `http://10.0.2.2:3001`,
-          `https://skill-swap-mad.onrender.com`
-        ].filter(Boolean);
+        try {
+          console.log("[Push Notification] Initializing native Capacitor PushNotifications plugin...");
+          import('@capacitor/push-notifications').then(async ({ PushNotifications }) => {
+            let permStatus = await PushNotifications.checkPermissions();
+            if (permStatus.receive === 'prompt') {
+              console.log("[Push Notification] Prompting user for native push permissions...");
+              permStatus = await PushNotifications.requestPermissions();
+            }
+            if (permStatus.receive === 'granted') {
+              console.log("[Push Notification] Permission granted. Registering with Google FCM gateway...");
+              await PushNotifications.register();
+            }
 
-        console.log("[SkillSwap] Probing backend URLs in sequence:", potentialUrls);
-        
-        let successfulUrl = '';
-        for (const url of potentialUrls) {
-          try {
-            console.log(`[SkillSwap] Probing network health on: ${url}`);
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 seconds fast probe
-            await fetch(`${url}/api/auth/login`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email: '', password: '' }),
-              signal: controller.signal
+            PushNotifications.addListener('registration', async (token) => {
+              console.log('[Push Notification] Registration success, FCM token: ' + token.value);
+              localStorage.setItem('skillswap_push_token', token.value);
+              const activeToken = localStorage.getItem('skillswap_token');
+              if (activeToken) {
+                await fetch(`${API_BASE}/users/push-token`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${activeToken}`
+                  },
+                  body: JSON.stringify({ pushToken: token.value })
+                }).catch(err => console.error("[Push Notification] Failed to sync token with backend:", err));
+              }
             });
-            clearTimeout(timeoutId);
-            successfulUrl = url;
-            console.log(`[SkillSwap] Connection verified successfully on: ${url}`);
-            break;
-          } catch (e) {
-            console.log(`[SkillSwap] Probe failed on: ${url}`);
-          }
-        }
 
-        if (successfulUrl) {
-          API_BASE = `${successfulUrl}/api`;
-          SOCKET_URL = successfulUrl;
-          console.log("[SkillSwap] Network configured to:", API_BASE);
-        } else {
-          console.warn("[SkillSwap] All local probes failed. Falling back to production cloud.");
-          API_BASE = `https://skill-swap-mad.onrender.com/api`;
-          SOCKET_URL = `https://skill-swap-mad.onrender.com`;
+            PushNotifications.addListener('registrationError', (error) => {
+              console.error('[Push Notification] Registration error: ' + JSON.stringify(error));
+            });
+
+            PushNotifications.addListener('pushNotificationReceived', (notification) => {
+              console.log('[Push Notification] Foreground push received: ' + JSON.stringify(notification));
+            });
+
+            PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
+              console.log('[Push Notification] Action performed: ' + JSON.stringify(action));
+            });
+          });
+        } catch (pushErr) {
+          console.error("[Push Notification] Native plugin setup failed:", pushErr);
         }
       }
+
+      // Production backend is set permanently. No probing loop needed.
 
       const token = localStorage.getItem('skillswap_token');
       if (token) {
@@ -756,6 +756,20 @@ export default function App() {
   const handleAuthSuccess = (token: string, user: any) => {
     localStorage.setItem('skillswap_token', token);
     setActiveUser(user);
+    
+    // Sync push token if stored
+    const pushToken = localStorage.getItem('skillswap_push_token');
+    if (pushToken) {
+      fetch(`${API_BASE}/users/push-token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ pushToken })
+      }).catch(err => console.error("[Push Notification] Failed to sync token on auth success:", err));
+    }
+
     if (user && user.title) {
       setCurrentFlowState('app');
     } else {

@@ -95,6 +95,14 @@ io.on('connection', (socket) => {
       callerName: data.callerName,
       callerPicture: data.callerPicture 
     });
+
+    // Dispatch native FCM push notification for incoming calls
+    sendFcmNotification(data.to, `Incoming SkillSwap Call 📞`, `${data.callerName} is calling you...`, {
+      type: 'call',
+      callerId: socket.userId,
+      callerName: data.callerName,
+      callerPicture: data.callerPicture || ''
+    });
   });
 
   socket.on('call-decline', (data) => {
