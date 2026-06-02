@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "550830734952",
+    "project_id": "phrasal-catwalk-495807-f1",
+    "storage_bucket": "phrasal-catwalk-495807-f1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:550830734952:android:71f788d3440dd858df05dd",
+        "android_client_info": {
+          "package_name": "com.skillswap.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "550830734952-il00vfj068arrbn0p5o6soh2jdi8ks6i.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.skillswap.app",
+            "certificate_hash": "644b9fb41c213c100c0c9d7dfd551659bf16f848"
+          }
+        },
+        {
+          "client_id": "550830734952-ka3lfmnf8aaemhq05ik3gsekcm17heee.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAs9wtHI2dxkt3yT4ft6ZnCn3ArVixWmVc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "550830734952-ka3lfmnf8aaemhq05ik3gsekcm17heee.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

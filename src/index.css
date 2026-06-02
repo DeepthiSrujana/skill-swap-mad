@@ -149,3 +149,8 @@ button, input, textarea {
 .btn-primary:active {
   transform: translateY(0);
 }
+
+@keyframes slide-down {
+  from { opacity: 0; transform: translateY(-40px); }
+  to { opacity: 1; transform: translateY(0); }
+}

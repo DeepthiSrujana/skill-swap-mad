@@ -6,6 +6,28 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const http = require('http');
 const { Server } = require('socket.io');
+const nodemailer = require('nodemailer');
+
+// Load .env variables manually if .env file exists
+try {
+  const envPath = path.join(__dirname, '.env');
+  if (fs.existsSync(envPath)) {
+    const envData = fs.readFileSync(envPath, 'utf8');
+    envData.split(/\r?\n/).forEach(line => {
+      const parts = line.split('=');
+      if (parts.length >= 2) {
+        const key = parts[0].trim();
+        const value = parts.slice(1).join('=').trim().replace(/^['"]|['"]$/g, '');
+        if (key && !key.startsWith('#')) {
+          process.env[key] = value;
+        }
+      }
+    });
+    console.log("[dotenv] Loaded environment variables from .env file successfully.");
+  }
+} catch (e) {
+  console.warn("[dotenv] Warning loading .env file:", e.message);
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -21,7 +43,8 @@ const JWT_SECRET = 'skillswap-super-secret-key-13579';
 const DB_PATH = path.join(__dirname, 'database.json');
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Middleware to authenticate socket connections with JWT
 io.use((socket, next) => {
@@ -65,9 +88,13 @@ io.on('connection', (socket) => {
 
   // WebRTC Call Signaling events
   socket.on('call-user', (data) => {
-    // data: { to, callerName }
+    // data: { to, callerName, callerPicture }
     console.log(`[Socket.io] User ${socket.userId} is calling ${data.to}`);
-    io.to(data.to).emit('incoming-call', { from: socket.userId, callerName: data.callerName });
+    io.to(data.to).emit('incoming-call', { 
+      from: socket.userId, 
+      callerName: data.callerName,
+      callerPicture: data.callerPicture 
+    });
   });
 
   socket.on('call-decline', (data) => {
@@ -110,26 +137,75 @@ io.on('connection', (socket) => {
   });
 });
 
+const MOCK_USERS = [
+  {
+    id: "mock_1",
+    name: "Jane Smith",
+    email: "jane.smith@example.com",
+    password: "$2a$10$YJBQmLrUTtdxy/w88JmsZOzLAHzQ0UsHLfqOdSftjq3axFLR9RpZ.", // 'password123'
+    trustScore: "99%",
+    swapsCount: "12",
+    ratingValue: "4.9",
+    communitiesCount: "3",
+    bio: "Senior UI/UX Designer at a fintech startup. Passionate about beautiful interfaces and user research.",
+    about: "I have been designing mobile apps for 5+ years. I can teach you Figma, design tokens, responsive layouts, and how to build clickable mockups.",
+    teaches: ["UI/UX Design", "Figma", "Mobile Design"],
+    wants: ["React Native", "Javascript", "Web Development"],
+    joinedCircles: ["UI/UX Designers", "Figma Wizards"],
+    profilePicture: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
+    profileImage: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
+    avatarUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150",
+    title: "Lead Product Designer",
+    availability: "Weekends, Flexible Timings",
+    language: "English",
+    experience: "5+ Years",
+    skillScores: { "UI/UX Design": 95, "Figma": 98 },
+    isVerified: true
+  }
+];
+
 // Helper helper utilities to read and write database
 function readDatabase() {
   try {
     const data = fs.readFileSync(DB_PATH, 'utf8');
     const parsed = JSON.parse(data);
     if (!parsed.users) parsed.users = [];
+    
+    // Automatic seeding: if database has less than 2 users, seed mock users to enrich Discover and testing experience
+    if (parsed.users.length < 2) {
+      console.log("[Database Seeding] Seeding mock users to enrich Discover and testing experience...");
+      const existingMockIds = new Set(parsed.users.map(u => u.id));
+      MOCK_USERS.forEach(mockUser => {
+        if (!existingMockIds.has(mockUser.id)) {
+          parsed.users.push(mockUser);
+        }
+      });
+      fs.writeFileSync(DB_PATH, JSON.stringify(parsed, null, 2), 'utf8');
+    }
+
     if (!parsed.sessions) parsed.sessions = [];
     if (!parsed.chats) parsed.chats = [];
     if (!parsed.notifications) parsed.notifications = [];
     return parsed;
   } catch (err) {
-    return { users: [], sessions: [], chats: [], notifications: [] };
+    const initialDb = {
+      users: [...MOCK_USERS],
+      sessions: [],
+      chats: [],
+      notifications: []
+    };
+    try {
+      fs.writeFileSync(DB_PATH, JSON.stringify(initialDb, null, 2), 'utf8');
+    } catch (wErr) {
+      console.error("[Database] Error seeding new database file:", wErr);
+    }
+    return initialDb;
   }
 }
 
 function writeDatabase(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
 }
-
-// Database seeding has been removed to allow pure user-defined profiles
 
 // =========================================================================
 // 🔐 AUTHENTICATION ENDPOINTS
@@ -159,7 +235,7 @@ app.post('/api/auth/signup', (req, finalRes) => {
     name,
     email: email.toLowerCase(),
     password: hashedPassword,
-    trustScore: '98%',
+    trustScore: '0%',
     swapsCount: '0',
     ratingValue: '0.0',
     communitiesCount: '0',
@@ -167,7 +243,13 @@ app.post('/api/auth/signup', (req, finalRes) => {
     about: 'I am a new Explorer on the SkillSwap platform! Let\'s swap some cool skills.',
     teaches: ['General / Academics'],
     wants: ['Programming / Coding'],
-    joinedCircles: []
+    joinedCircles: [],
+    profilePicture: '',
+    profileImage: '',
+    avatarUrl: '',
+    isVerified: true,
+    verificationOtp: null,
+    otpExpiresAt: null
   };
 
   db.users.push(newUser);
@@ -188,6 +270,8 @@ app.post('/api/auth/signup', (req, finalRes) => {
 
   writeDatabase(db);
 
+  // OTP Verification completely disabled
+
   // Generate JWT Token
   const token = jwt.sign({ id: newUser.id, email: newUser.email }, JWT_SECRET, { expiresIn: '7d' });
 
@@ -202,7 +286,7 @@ app.post('/api/auth/signup', (req, finalRes) => {
 
 // Google Authentication / Quick Signup Endpoint
 app.post('/api/auth/google', async (req, finalRes) => {
-  let { email, name, idToken, password } = req.body;
+  let { email, name, idToken, password, imageUrl } = req.body;
 
   if (idToken) {
     try {
@@ -212,6 +296,9 @@ app.post('/api/auth/google', async (req, finalRes) => {
         const ticket = await response.json();
         email = ticket.email;
         name = ticket.name || ticket.given_name || "Google User";
+        if (ticket.picture) {
+          imageUrl = ticket.picture;
+        }
         console.log(`[Google Auth] Successfully verified token for: ${email}`);
       } else {
         const errorText = await response.text();
@@ -249,7 +336,7 @@ app.post('/api/auth/google', async (req, finalRes) => {
       name,
       email: email.toLowerCase(),
       password: userPassword,
-      trustScore: '98%',
+      trustScore: '0%',
       swapsCount: '0',
       ratingValue: '0.0',
       communitiesCount: '0',
@@ -257,11 +344,17 @@ app.post('/api/auth/google', async (req, finalRes) => {
       about: 'I am a new Explorer on the SkillSwap platform! Let\'s swap some cool skills.',
       teaches: ['General / Academics'],
       wants: ['Programming / Coding'],
-      joinedCircles: []
+      joinedCircles: [],
+      profilePicture: imageUrl || '',
+      profileImage: imageUrl || '',
+      avatarUrl: imageUrl || '',
+      isVerified: true,
+      verificationOtp: null,
+      otpExpiresAt: null
     };
 
     db.users.push(user);
-
+ 
     // Create Welcome Notification
     const welcomeNotification = {
       id: "notif_" + Date.now(),
@@ -272,20 +365,22 @@ app.post('/api/auth/google', async (req, finalRes) => {
       timestamp: Date.now(),
       read: false
     };
-    
+     
     if (!db.notifications) db.notifications = [];
     db.notifications.push(welcomeNotification);
-
+ 
     writeDatabase(db);
     status = 201;
   }
-
+ 
+  // OTP Verification completely disabled
+ 
   // Generate JWT Token
   const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
-
+ 
   // Exclude password in response
   const { password: _, ...userWithoutPassword } = user;
-
+ 
   return finalRes.status(status).json({
     token,
     user: userWithoutPassword
@@ -314,6 +409,8 @@ app.post('/api/auth/login', (req, finalRes) => {
     return finalRes.status(400).json({ error: 'Invalid email or password.' });
   }
 
+  // OTP Verification completely disabled
+
   // Generate JWT Token
   const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
 
@@ -325,6 +422,208 @@ app.post('/api/auth/login', (req, finalRes) => {
     user: userWithoutPassword
   });
 });
+
+// OTP Verification Endpoint
+app.post('/api/auth/verify-otp', (req, finalRes) => {
+  const { email, otp } = req.body;
+  if (!email || !otp) {
+    return finalRes.status(400).json({ error: 'Email and OTP are required.' });
+  }
+
+  const db = readDatabase();
+  const userIndex = db.users.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
+
+  if (userIndex === -1) {
+    return finalRes.status(400).json({ error: 'User not found.' });
+  }
+
+  const user = db.users[userIndex];
+  if (user.isVerified) {
+    return finalRes.status(400).json({ error: 'Account is already verified.' });
+  }
+
+  if (user.verificationOtp !== otp) {
+    return finalRes.status(400).json({ error: 'Incorrect 4-digit OTP. Please check your email.' });
+  }
+
+  if (Date.now() > user.otpExpiresAt) {
+    return finalRes.status(400).json({ error: 'OTP has expired. Please request a new one.' });
+  }
+
+  // Update verified status
+  user.isVerified = true;
+  user.verificationOtp = null;
+  user.otpExpiresAt = null;
+  db.users[userIndex] = user;
+  
+  try {
+    writeDatabase(db);
+  } catch (err) {
+    return finalRes.status(500).json({ error: 'Failed to update database.' });
+  }
+
+  // Generate JWT Token
+  const token = jwt.sign({ id: user.id, email: user.email }, JWT_SECRET, { expiresIn: '7d' });
+
+  // Exclude password in response
+  const { password: _, ...userWithoutPassword } = user;
+
+  return finalRes.json({
+    token,
+    user: userWithoutPassword,
+    message: 'Account verified successfully!'
+  });
+});
+
+// Resend OTP Endpoint
+app.post('/api/auth/resend-otp', (req, finalRes) => {
+  const { email } = req.body;
+  if (!email) {
+    return finalRes.status(400).json({ error: 'Email is required.' });
+  }
+
+  const db = readDatabase();
+  const userIndex = db.users.findIndex(u => u.email.toLowerCase() === email.toLowerCase());
+
+  if (userIndex === -1) {
+    return finalRes.status(400).json({ error: 'User not found.' });
+  }
+
+  const user = db.users[userIndex];
+  if (user.isVerified) {
+    return finalRes.status(400).json({ error: 'Account is already verified.' });
+  }
+
+  // Generate new OTP
+  const newOtp = Math.floor(1000 + Math.random() * 9000).toString();
+  user.verificationOtp = newOtp;
+  user.otpExpiresAt = Date.now() + 10 * 60 * 1000;
+  db.users[userIndex] = user;
+  writeDatabase(db);
+
+  sendOtpEmail(user.email, user.name, newOtp);
+
+  return finalRes.json({ message: 'A new 4-digit OTP has been sent to your email.' });
+});
+
+// Secure Change Password Endpoint
+app.post('/api/users/change-password', authenticateToken, (req, finalRes) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return finalRes.status(400).json({ error: 'Current password and new password are required.' });
+  }
+
+  const db = readDatabase();
+  const userIndex = db.users.findIndex(u => u.id === req.user.id);
+
+  if (userIndex === -1) {
+    return finalRes.status(404).json({ error: 'User not found.' });
+  }
+
+  const user = db.users[userIndex];
+
+  // Verify current password match
+  const passwordMatch = bcrypt.compareSync(currentPassword, user.password);
+  if (!passwordMatch) {
+    return finalRes.status(400).json({ error: 'Incorrect current password.' });
+  }
+
+  // Encrypt new password
+  user.password = bcrypt.hashSync(newPassword, 10);
+  db.users[userIndex] = user;
+  
+  try {
+    writeDatabase(db);
+    console.log(`[Backend] Password successfully updated for user: ${req.user.id}`);
+  } catch (err) {
+    return finalRes.status(500).json({ error: 'Failed to update database.' });
+  }
+
+  return finalRes.json({ success: true, message: 'Password changed successfully.' });
+});
+
+// =========================================================================
+// 📧 SMTP EMAIL DISPATCHER UTILITIES
+// =========================================================================
+let mailTransporter = null;
+
+async function getMailTransporter() {
+  if (mailTransporter) return mailTransporter;
+
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = process.env.SMTP_PORT || 587;
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  
+  if (smtpHost && smtpUser && smtpPass) {
+    console.log(`[Email OTP] Using custom SMTP server: ${smtpHost}:${smtpPort}`);
+    mailTransporter = nodemailer.createTransport({
+      host: smtpHost,
+      port: parseInt(smtpPort, 10),
+      secure: parseInt(smtpPort, 10) === 465,
+      auth: { user: smtpUser, pass: smtpPass }
+    });
+  } else {
+    console.log("[Email OTP] No SMTP credentials provided. Creating test Ethereal SMTP account...");
+    try {
+      const testAccount = await nodemailer.createTestAccount();
+      console.log(`[Email OTP] Created Ethereal account! User: ${testAccount.user}, Pass: ${testAccount.pass}`);
+      mailTransporter = nodemailer.createTransport({
+        host: testAccount.smtp.host,
+        port: testAccount.smtp.port,
+        secure: testAccount.smtp.secure,
+        auth: { user: testAccount.user, pass: testAccount.pass }
+      });
+    } catch (e) {
+      console.error("[Email OTP] Error creating Ethereal account, falling back to local mock logger:", e);
+      mailTransporter = {
+        sendMail: async (options) => {
+          console.log("\n================ MOCK EMAIL SENT ================");
+          console.log(`To: ${options.to}`);
+          console.log(`Subject: ${options.subject}`);
+          console.log(`Body:\n${options.text}`);
+          console.log("=================================================\n");
+          return { messageId: "mock_id_" + Date.now() };
+        }
+      };
+    }
+  }
+  return mailTransporter;
+}
+
+async function sendOtpEmail(email, name, otp) {
+  try {
+    const transporter = await getMailTransporter();
+    const mailOptions = {
+      from: process.env.SMTP_FROM || '"SkillSwap Verification" <noreply@skillswap.com>',
+      to: email,
+      subject: 'Verify Your SkillSwap Account 🚀',
+      text: `Hello ${name},\n\nWelcome to SkillSwap! To complete your registration and verify your email, please enter the following 4-digit One-Time Password (OTP):\n\n👉 ${otp}\n\nThis OTP is valid for 10 minutes. If you did not sign up for a SkillSwap account, please ignore this email.\n\nHappy Swapping,\nThe SkillSwap Team`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 500px; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px; background-color: #fafafa;">
+          <h2 style="color: #6366F1; text-align: center;">Verify Your SkillSwap Account 🚀</h2>
+          <p>Hello <strong>${name}</strong>,</p>
+          <p>Welcome to SkillSwap! To complete your registration and verify your email, please enter the following 4-digit One-Time Password (OTP):</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <span style="font-size: 32px; font-weight: 900; color: #fff; background: linear-gradient(135deg, #6366F1 0%, #8B5CF6 100%); padding: 12px 36px; border-radius: 12px; letter-spacing: 4px; display: inline-block; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);">${otp}</span>
+          </div>
+          <p style="color: #666; font-size: 13px;">This OTP is valid for <strong>10 minutes</strong>. If you did not sign up for a SkillSwap account, please ignore this email.</p>
+          <hr style="border: 0; border-top: 1px solid #eeeeee; margin: 20px 0;" />
+          <p style="font-size: 12px; color: #999; text-align: center;">Happy Swapping,<br/>The SkillSwap Team</p>
+        </div>
+      `
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`[Email OTP] Verification email successfully sent to ${email}. Message ID: ${info.messageId}`);
+    const previewUrl = nodemailer.getTestMessageUrl(info);
+    if (previewUrl) {
+      console.log(`\n📬 [TEST EMAIL PREVIEW] View OTP email online at: ${previewUrl}\n`);
+    }
+  } catch (err) {
+    console.error("[Email OTP] Error sending verification email:", err);
+  }
+}
 
 // =========================================================================
 // 🧭 PROTECTED USER PROFILE ENDPOINTS
@@ -366,17 +665,36 @@ app.put('/api/users/profile', authenticateToken, (req, finalRes) => {
   const db = readDatabase();
   const userIndex = db.users.findIndex(u => u.id === req.user.id);
 
+  console.log(`[Backend] PUT /api/users/profile triggered for user ID: ${req.user.id}`);
+  console.log(`[Backend] Request body fields:`, Object.keys(req.body));
+
   if (userIndex === -1) {
+    console.error(`[Backend] User ${req.user.id} not found in database.`);
     return finalRes.status(404).json({ error: 'User not found.' });
   }
 
-  const { bio, about, teaches, wants, skillScores, skillRatings, skillLearners } = req.body;
+  const { bio, about, teaches, wants, skillScores, skillRatings, skillLearners, profilePicture, profileImage, avatarUrl, password } = req.body;
   const user = db.users[userIndex];
+
+  if (password !== undefined) {
+    user.password = bcrypt.hashSync(password, 10);
+    console.log(`[Backend] Password successfully updated in profile PUT for user: ${req.user.id}`);
+  }
 
   if (bio !== undefined) user.bio = bio;
   if (about !== undefined) user.about = about;
   if (teaches !== undefined) user.teaches = teaches;
   if (wants !== undefined) user.wants = wants;
+  
+  const imgVal = profilePicture || profileImage || avatarUrl;
+  if (imgVal !== undefined) {
+    console.log(`[Backend] profilePicture is defined in request. Length: ${imgVal ? imgVal.length : 0} chars.`);
+    user.profilePicture = imgVal;
+    user.profileImage = imgVal;
+    user.avatarUrl = imgVal;
+  } else {
+    console.log(`[Backend] profilePicture is UNDEFINED in request. Preserving existing value.`);
+  }
   
   if (skillScores !== undefined) {
     // Automatically generate notification for newly verified skill
@@ -414,7 +732,14 @@ app.put('/api/users/profile', authenticateToken, (req, finalRes) => {
   if (trustScore !== undefined) user.trustScore = trustScore;
 
   db.users[userIndex] = user;
-  writeDatabase(db);
+  
+  try {
+    writeDatabase(db);
+    console.log(`[Backend] Successfully saved updated profile details for user: ${req.user.id} (Picture Length: ${user.profilePicture ? user.profilePicture.length : 0})`);
+  } catch (writeErr) {
+    console.error(`[Backend] ERROR writing database update:`, writeErr);
+    return finalRes.status(500).json({ error: 'Database write failed. Profile data could not be saved permanently.' });
+  }
 
   const { password: _, ...userWithoutPassword } = user;
   return finalRes.json(userWithoutPassword);
@@ -422,7 +747,7 @@ app.put('/api/users/profile', authenticateToken, (req, finalRes) => {
 
 // Rate a User / Swapper
 app.post('/api/users/rate', authenticateToken, (req, finalRes) => {
-  const { targetUserId, rating } = req.body;
+  const { targetUserId, rating, trustScore } = req.body;
   if (!targetUserId || rating === undefined) {
     return finalRes.status(400).json({ error: 'Target User ID and rating are required.' });
   }
@@ -447,9 +772,17 @@ app.post('/api/users/rate', authenticateToken, (req, finalRes) => {
   const avg = sum / user.ratingsReceived.length;
   user.ratingValue = avg.toFixed(1);
 
+  if (trustScore !== undefined) {
+    user.trustScore = trustScore;
+  } else {
+    // Dynamic trust score based on received ratings (avg * 20)
+    const trustScoreNum = Math.min(100, Math.round(avg * 20));
+    user.trustScore = `${trustScoreNum}%`;
+  }
+
   writeDatabase(db);
   
-  console.log(`[Backend] User ${targetUserId} received a rating of ${newRatingValue}. New average: ${user.ratingValue}`);
+  console.log(`[Backend] User ${targetUserId} received a rating of ${newRatingValue}. New average: ${user.ratingValue}, New Trust Score: ${user.trustScore}`);
 
   return finalRes.json({ ratingValue: user.ratingValue });
 });
@@ -473,12 +806,174 @@ app.delete('/api/users/profile', authenticateToken, (req, finalRes) => {
   // Clean up notifications for this user
   db.notifications = db.notifications.filter(n => n.userId !== userId);
 
+  // Clean up chats/messages associated with this user
+  if (db.chats) {
+    db.chats = db.chats.filter(c => c.senderId !== userId && c.receiverId !== userId);
+  }
+
   writeDatabase(db);
 
-  console.log(`[Backend] Permanently deleted account and all associated sessions for user: ${userId}`);
+  console.log(`[Backend] Permanently deleted account, sessions, chats, and notifications for user: ${userId}`);
 
-  return finalRes.json({ success: true, message: 'Account deleted successfully.' });
+  return finalRes.json({ success: true, message: 'Account deleted successfully and all your data has been completely cleared.' });
 });
+
+// Register FCM Push Token for active user
+app.post('/api/users/push-token', authenticateToken, (req, finalRes) => {
+  const { pushToken } = req.body;
+  if (!pushToken) {
+    return finalRes.status(400).json({ error: 'Push token is required.' });
+  }
+
+  const db = readDatabase();
+  const userIndex = db.users.findIndex(u => u.id === req.user.id);
+
+  if (userIndex === -1) {
+    return finalRes.status(404).json({ error: 'User not found.' });
+  }
+
+  db.users[userIndex].pushToken = pushToken;
+  writeDatabase(db);
+
+  console.log(`[Backend FCM] Successfully registered push token for user ${req.user.id}`);
+  return finalRes.json({ success: true, message: 'Push token registered successfully.' });
+});
+
+// AI Support Chat Assistant Endpoint
+app.post('/api/support/chat', async (req, finalRes) => {
+  const { message } = req.body;
+  if (!message) {
+    return finalRes.status(400).json({ error: 'Message is required.' });
+  }
+
+  const geminiKey = process.env.GEMINI_API_KEY;
+  const systemPrompt = `You are SkillSwap AI Support Assistant, a professional, smart, and friendly AI chatbot integrated into the SkillSwap mobile application.
+Answer the user's questions about the app.
+Be concise (maximum 3 sentences per response).
+Here is a list of app rules and features to guide you:
+- SkillSwap is a platform for swapping skills (peer-to-peer exchange).
+- Users can teach skills they are good at and learn skills they want.
+- Profile: Add/remove skills from Teach or Want lists.
+- AI MCQ Assessments: Users prove their expertise in a skill by taking a 5-question AI-generated multiple-choice quiz. Passing increases their skill score and starting trust score.
+- Trust Score: Starts at 0% for new accounts. Increases when completing skill assessments or when highly rated by session partners (0%, 25%, 50%, 75%, 100%).
+- Sessions: Users can schedule swap sessions, launch a live video/audio swap room, write code, chat, and rate the partner after the session completes.
+- Account Settings: Accessible from the Profile tab via the Settings gear. Includes security configurations, changing passwords, and permanently deleting account (which purges all data: profile, sessions, direct messages, notifications).
+- Security: All logins are secure. OTP verification is completely disabled by default for instant setup.
+- Support: You are always here to help!`;
+
+  if (geminiKey) {
+    try {
+      console.log("[Support Chat AI] Using Google Gemini API to answer support query...");
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `${systemPrompt}\n\nUser Question: ${message}\n\nAI Assistant Response:`
+            }]
+          }],
+          generationConfig: {
+            maxOutputTokens: 200,
+            temperature: 0.7
+          }
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (text) {
+          console.log("[Support Chat AI] Gemini success response.");
+          return finalRes.json({ reply: text.trim() });
+        }
+      }
+      console.warn("[Support Chat AI] Gemini returned empty response or error status. Falling back to offline model...");
+    } catch (e) {
+      console.error("[Support Chat AI] Gemini network error. Falling back to offline model:", e);
+    }
+  }
+
+  // Smart Offline Fallback Agent
+  console.log("[Support Chat AI] Using offline simulated AI expert responder...");
+  const lower = message.toLowerCase();
+  let reply = "Hello! I am your SkillSwap AI Support Assistant. I'm here to help you get the most out of SkillSwap. Can you please clarify your request?";
+
+  if (lower.includes("delete") || lower.includes("account") || lower.includes("clear") || lower.includes("purge")) {
+    reply = "To permanently delete your account, click the 'Delete Account' button inside the Settings menu. This instantly wipes all your personal data, sessions, notifications, and chat history permanently from the system.";
+  } else if (lower.includes("trust") || lower.includes("score") || lower.includes("rate") || lower.includes("rating")) {
+    reply = "Your Trust Score starts at 0% and increases when you successfully pass MCQ skill assessments or receive good partner reviews (up to 100%) after finishing swap sessions.";
+  } else if (lower.includes("assessment") || lower.includes("mcq") || lower.includes("quiz") || lower.includes("test")) {
+    reply = "Skill assessments are 5-question AI quizzes designed to verify your skills. Tapping any skill you wish to teach or learn will trigger the assessment screen instantly.";
+  } else if (lower.includes("session") || lower.includes("swap") || lower.includes("room") || lower.includes("video") || lower.includes("code")) {
+    reply = "In the Sessions tab, you can schedule and launch active swap rooms where you can write code, video chat in real-time, and rate your swap partner once finished.";
+  } else if (lower.includes("password") || lower.includes("change") || lower.includes("security")) {
+    reply = "You can update your password securely inside Account Settings under the Profile settings tab. Simply enter your current password and your new password.";
+  } else if (lower.includes("chat") || lower.includes("message") || lower.includes("partner")) {
+    reply = "You can chat with potential partners by browsing profiles in the Discover tab and tapping 'Chat'. Active conversations are listed in your Chat tab.";
+  } else if (lower.includes("skill") || lower.includes("teach") || lower.includes("want") || lower.includes("learn")) {
+    reply = "To add skills you teaches or wants, go to your Profile and tap '+ Add Skill'. You will be given a quick verification assessment to update your profile list.";
+  } else if (lower.includes("hello") || lower.includes("hi") || lower.includes("hey")) {
+    reply = "Hello! I am your SkillSwap AI Assistant. How can I help you navigate through skill swaps, assessments, or account settings today?";
+  }
+
+  return finalRes.json({ reply });
+});
+
+// FCM Push Notification dispatcher utility using standard Legacy REST API (high-compatibility fallback)
+async function sendFcmNotification(targetUserId, title, body, dataPayload = {}) {
+  const db = readDatabase();
+  const user = db.users.find(u => u.id === targetUserId);
+  
+  if (!user || !user.pushToken) {
+    console.log(`[Backend FCM] User ${targetUserId} has no registered push token. Skipping FCM push.`);
+    return false;
+  }
+
+  console.log(`[Backend FCM] Dispatching FCM notification to user ${targetUserId} (${user.name}). Token: ${user.pushToken.substring(0, 15)}...`);
+
+  // Developer can set the server key as an env variable or edit here
+  const FCM_SERVER_KEY = process.env.FCM_SERVER_KEY || 'AAAAc9zS9wU:APA91bF97c5M2-nZ7bZ2Y4pT...'; // placeholder/fallback key
+
+  try {
+    const response = await fetch('https://fcm.googleapis.com/fcm/send', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `key=${FCM_SERVER_KEY}`
+      },
+      body: JSON.stringify({
+        to: user.pushToken,
+        notification: {
+          title: title,
+          body: body,
+          sound: 'default',
+          badge: '1'
+        },
+        data: {
+          click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          id: String(Date.now()),
+          title: title,
+          body: body,
+          ...dataPayload
+        },
+        priority: 'high'
+      })
+    });
+
+    if (response.ok) {
+      console.log(`[Backend FCM] Push notification successfully dispatched to FCM gateway for user ${targetUserId}`);
+      return true;
+    } else {
+      const errorText = await response.text();
+      console.error(`[Backend FCM] FCM gateway returned error response:`, errorText);
+      return false;
+    }
+  } catch (err) {
+    console.error(`[Backend FCM] Network error dispatching push notification:`, err);
+    return false;
+  }
+}
 
 // Dynamic Match Score calculation helper
 function calculateMatchScore(currentUser, targetUser) {
@@ -529,7 +1024,7 @@ app.get('/api/users/discover', authenticateToken, (req, finalRes) => {
   const currentUser = db.users.find(u => u.id === userId);
 
   // Filter out the requesting user
-  const otherUsers = db.users.filter(u => u.id !== userId);
+  const otherUsers = db.users.filter(u => String(u.id) !== String(userId));
 
   const mappedSwappers = otherUsers.map(u => {
     // Generate initials avatar
@@ -539,9 +1034,12 @@ app.get('/api/users/discover', authenticateToken, (req, finalRes) => {
       id: u.id,
       name: u.name,
       avatar: initials,
+      profilePicture: u.profilePicture || u.profileImage || u.avatarUrl || '',
+      profileImage: u.profilePicture || u.profileImage || u.avatarUrl || '',
+      avatarUrl: u.profilePicture || u.profileImage || u.avatarUrl || '',
       title: u.title || "SkillSwap Explorer",
-      teaches: u.teaches && u.teaches.length > 0 ? u.teaches.join(', ') : "General / Academics",
-      wants: u.wants && u.wants.length > 0 ? u.wants.join(', ') : "Programming / Coding",
+      teaches: (Array.isArray(u.teaches) && u.teaches.length > 0) ? u.teaches.join(', ') : "General / Academics",
+      wants: (Array.isArray(u.wants) && u.wants.length > 0) ? u.wants.join(', ') : "Programming / Coding",
       matchScore: calculateMatchScore(currentUser, u),
       availability: u.availability || "Weekends, Flexible Timings",
       language: u.language || "English",
@@ -590,6 +1088,7 @@ app.get('/api/chats', authenticateToken, (req, finalRes) => {
     return {
       partnerId: pId,
       partnerName: pName,
+      partnerPicture: userInDb ? userInDb.profilePicture : undefined,
       lastMessage
     };
   });
@@ -668,13 +1167,9 @@ app.post('/api/chats/:partnerId', authenticateToken, (req, finalRes) => {
   db.chats.push(newMessage);
   writeDatabase(db);
 
-  let senderName = undefined;
-  if (isCommunityCircle) {
-    const senderObj = db.users.find(u => u.id === userId);
-    if (senderObj) {
-      senderName = senderObj.name;
-    }
-  }
+  const senderObj = db.users.find(u => u.id === userId);
+  const senderName = senderObj ? senderObj.name : "Someone";
+  const senderPicture = senderObj ? senderObj.profilePicture : undefined;
 
   // Emit real-time message event via Socket.io
   const socketMsg = {
@@ -682,6 +1177,7 @@ app.post('/api/chats/:partnerId', authenticateToken, (req, finalRes) => {
     senderId: userId,
     receiverId: partnerId,
     senderName,
+    senderPicture,
     text: newMessage.text,
     timestamp: newMessage.timestamp
   };
@@ -691,6 +1187,13 @@ app.post('/api/chats/:partnerId', authenticateToken, (req, finalRes) => {
   } else {
     io.to(partnerId).emit('message', socketMsg);
     io.to(userId).emit('message', socketMsg);
+    
+    // Dispatch native FCM push notification to direct chat partner
+    sendFcmNotification(partnerId, `New message from ${senderName} 💬`, newMessage.text, {
+      type: 'message',
+      senderId: userId,
+      senderName: senderName
+    });
   }
 
   return finalRes.status(201).json({
@@ -698,7 +1201,8 @@ app.post('/api/chats/:partnerId', authenticateToken, (req, finalRes) => {
     text: newMessage.text,
     isMe: true,
     senderId: userId,
-    senderName: isCommunityCircle ? senderName : undefined,
+    senderName,
+    senderPicture,
     timestamp: newMessage.timestamp
   });
 });
@@ -724,7 +1228,11 @@ app.get('/api/sessions', authenticateToken, (req, finalRes) => {
     if (s.isInbound === undefined) {
       s.isInbound = false;
     }
-    return s;
+    const partnerUser = db.users.find(u => u.id === s.partnerId);
+    return {
+      ...s,
+      partnerPicture: partnerUser ? partnerUser.profilePicture : undefined
+    };
   });
 
   return finalRes.json(mappedSessions);
@@ -782,6 +1290,8 @@ app.post('/api/sessions', authenticateToken, (req, finalRes) => {
 
   db.sessions.push(requesterSession, targetSession);
 
+  const partnerUser = db.users.find(u => u.id === partnerId);
+
   // Generate Session Requested Notification for target
   const targetNotif = {
     id: "notif_tgt_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
@@ -790,7 +1300,8 @@ app.post('/api/sessions', authenticateToken, (req, finalRes) => {
     message: `${requesterName} requested a skill swap session with you for "${teaches}".`,
     type: "session",
     timestamp: Date.now(),
-    read: false
+    read: false,
+    senderPicture: requester ? requester.profilePicture : undefined
   };
   db.notifications.push(targetNotif);
   io.to(partnerId).emit('notification', targetNotif);
@@ -803,7 +1314,8 @@ app.post('/api/sessions', authenticateToken, (req, finalRes) => {
     message: `You requested a skill swap session with ${partnerName} for "${teaches}". They have been notified!`,
     type: "session",
     timestamp: Date.now(),
-    read: false
+    read: false,
+    senderPicture: partnerUser ? partnerUser.profilePicture : undefined
   };
   db.notifications.push(requesterNotif);
   io.to(userId).emit('notification', requesterNotif);
@@ -829,6 +1341,13 @@ app.post('/api/sessions', authenticateToken, (req, finalRes) => {
   };
   io.to(partnerId).emit('message', socketMsg);
   io.to(userId).emit('message', socketMsg);
+
+  // Dispatch native FCM push notification to target partner about swap request
+  sendFcmNotification(partnerId, "Swap Requested! 📅", `${requesterName} requested a skill swap session with you for "${teaches || 'our exchange'}".`, {
+    type: 'session',
+    groupId: sessionGroupId,
+    partnerId: userId
+  });
 
   writeDatabase(db);
 
@@ -888,6 +1407,7 @@ app.put('/api/sessions/:id', authenticateToken, (req, finalRes) => {
 
     // Generate Accepted Notifications for both users
     relatedSessions.forEach(s => {
+      const partnerUser = db.users.find(u => u.id === s.partnerId);
       const acceptNotif = {
         id: "notif_accept_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
         userId: s.userId,
@@ -897,7 +1417,8 @@ app.put('/api/sessions/:id', authenticateToken, (req, finalRes) => {
           : `${db.users.find(u => u.id === userId)?.name || 'Your partner'} accepted your skill swap request!`,
         type: "session",
         timestamp: Date.now(),
-        read: false
+        read: false,
+        senderPicture: partnerUser ? partnerUser.profilePicture : undefined
       };
       db.notifications.push(acceptNotif);
       io.to(s.userId).emit('notification', acceptNotif);
@@ -931,6 +1452,16 @@ app.put('/api/sessions/:id', authenticateToken, (req, finalRes) => {
         io.to(userId).emit('message', socketMsg);
         io.to(otherSession.userId).emit('message', socketMsg);
       }
+    }
+
+    // Dispatch native FCM push notification to the partner about swap acceptance
+    const accepterName = db.users.find(u => u.id === userId)?.name || 'Your partner';
+    if (otherSession) {
+      sendFcmNotification(otherSession.userId, "Swap Accepted! 🎉", `${accepterName} accepted your skill swap request!`, {
+        type: 'session_accepted',
+        groupId: groupId,
+        partnerId: userId
+      });
     }
   }
 

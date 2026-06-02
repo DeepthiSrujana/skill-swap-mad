@@ -1,0 +1,572 @@
+﻿diff --git a/src/App.tsx b/src/App.tsx
+index 3d247c1..ff422d0 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -607,7 +607,7 @@ export default function App() {
+         try {
+           console.log("[Google Auth] Initializing native plugin options at startup...");
+           await GoogleAuth.initialize({
+-            clientId: '8779954823976-8f3bdfa06e115ec.apps.googleusercontent.com',
++            clientId: '550830734952-ka3lfmnf8aaemhq05ik3gsekcm17heee.apps.googleusercontent.com',
+             scopes: ['profile', 'email'],
+             grantOfflineAccess: true
+           });
+@@ -883,308 +883,13 @@ function OnboardingScreen({ onGetStarted, onLoginRoute }: { onGetStarted: () =>
+ // 2.5∩╕ÅΓâú SERVER CONFIGURATION MODAL
+ // =========================================================================
+ // =========================================================================
+-// 2.7∩╕ÅΓâú GOOGLE ACCOUNT SELECTOR MODAL
+-// =========================================================================
+-interface GoogleAccountSelectorModalProps {
+-  isOpen: boolean;
+-  onClose: () => void;
+-  onSelectAccount: (email: string, name: string) => void;
+-}
+-
+-function GoogleAccountSelectorModal({ isOpen, onClose, onSelectAccount }: GoogleAccountSelectorModalProps) {
+-  const [customEmail, setCustomEmail] = useState('');
+-  const [customName, setCustomName] = useState('');
+-  const [errorMsg, setErrorMsg] = useState('');
+-
+-  if (!isOpen) return null;
+-
+-  const handleCustomSubmit = (e: React.FormEvent) => {
+-    e.preventDefault();
+-    if (!customEmail || !customName) return;
+-    if (!customEmail.includes('@') || !customEmail.includes('.')) {
+-      setErrorMsg('Please enter a valid Google email address.');
+-      return;
+-    }
+-    onSelectAccount(customEmail.trim().toLowerCase(), customName.trim());
+-    onClose();
+-  };
+-
+-  return (
+-    <div style={{
+-      position: 'absolute',
+-      inset: 0,
+-      backgroundColor: 'rgba(9, 8, 14, 0.85)',
+-      backdropFilter: 'blur(8px)',
+-      zIndex: 9999,
+-      display: 'flex',
+-      alignItems: 'center',
+-      justifyContent: 'center',
+-      padding: '20px',
+-      animation: 'fade-in 0.3s ease'
+-    }}>
+-      <div style={{
+-        backgroundColor: '#161426',
+-        border: '1px solid rgba(255,255,255,0.08)',
+-        borderRadius: '20px',
+-        padding: '24px',
+-        width: '100%',
+-        maxWidth: '320px',
+-        boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+-        display: 'flex',
+-        flexDirection: 'column',
+-        gap: '16px'
+-      }}>
+-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+-          <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#fff', margin: 0 }}>Sign in with Google</h3>
+-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}>
+-            <X size={20} />
+-          </button>
+-        </div>
+-
+-        {errorMsg && (
+-          <div style={{ color: '#F87171', fontSize: '11px', textAlign: 'center' }}>
+-            {errorMsg}
+-          </div>
+-        )}
+-
+-        <form onSubmit={handleCustomSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+-            <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Google Name</label>
+-            <input 
+-              required
+-              type="text" 
+-              placeholder="e.g. Jahnavi"
+-              value={customName}
+-              onChange={(e) => setCustomName(e.target.value)}
+-              style={{
+-                height: '40px',
+-                backgroundColor: 'rgba(255,255,255,0.03)',
+-                border: '1px solid rgba(255,255,255,0.06)',
+-                borderRadius: '10px',
+-                color: '#fff',
+-                padding: '0 12px',
+-                fontSize: '13px',
+-                outline: 'none'
+-              }}
+-            />
+-          </div>
+-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+-            <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Google Email</label>
+-            <input 
+-              required
+-              type="email" 
+-              placeholder="e.g. jahnavi@gmail.com"
+-              value={customEmail}
+-              onChange={(e) => setCustomEmail(e.target.value)}
+-              style={{
+-                height: '40px',
+-                backgroundColor: 'rgba(255,255,255,0.03)',
+-                border: '1px solid rgba(255,255,255,0.06)',
+-                borderRadius: '10px',
+-                color: '#fff',
+-                padding: '0 12px',
+-                fontSize: '13px',
+-                outline: 'none'
+-              }}
+-            />
+-          </div>
+-          <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+-            <button 
+-              type="button" 
+-              onClick={onClose}
+-              style={{
+-                flex: 1,
+-                height: '40px',
+-                borderRadius: '10px',
+-                backgroundColor: 'transparent',
+-                border: '1px solid rgba(255,255,255,0.08)',
+-                color: 'rgba(255,255,255,0.6)',
+-                cursor: 'pointer',
+-                fontSize: '13px'
+-              }}
+-            >
+-              Cancel
+-            </button>
+-            <button 
+-              type="submit" 
+-              className="btn-primary"
+-              style={{
+-                flex: 1,
+-                height: '40px',
+-                fontSize: '13px',
+-                boxShadow: 'none'
+-              }}
+-            >
+-              Next
+-            </button>
+-          </div>
+-        </form>
+-      </div>
+-    </div>
+-  );
+-}
+-
+-// =========================================================================
+-// 3∩╕ÅΓâú SIGN UP SCREEN
+-// =========================================================================
+-
+-interface GooglePasswordModalProps {
+-  isOpen: boolean;
+-  email: string;
+-  initialName: string;
+-  onClose: () => void;
+-  onSubmitDetails: (name: string, password: string) => void;
+-  isSubmitting: boolean;
+-}
+-
+-function GooglePasswordModal({ isOpen, email, initialName, onClose, onSubmitDetails, isSubmitting }: GooglePasswordModalProps) {
+-  const [name, setName] = useState('');
+-  const [password, setPassword] = useState('');
+-
+-  useEffect(() => {
+-    if (isOpen) {
+-      setName(initialName || '');
+-      setPassword('');
+-    }
+-  }, [isOpen, initialName]);
+-
+-  if (!isOpen) return null;
+-
+-  const handleSubmit = (e: React.FormEvent) => {
+-    e.preventDefault();
+-    if (!name.trim() || !password) return;
+-    onSubmitDetails(name.trim(), password);
+-  };
+-
+-  return (
+-    <div style={{
+-      position: 'absolute',
+-      inset: 0,
+-      backgroundColor: 'rgba(9, 8, 14, 0.85)',
+-      backdropFilter: 'blur(8px)',
+-      zIndex: 9999,
+-      display: 'flex',
+-      alignItems: 'center',
+-      justifyContent: 'center',
+-      padding: '20px',
+-      animation: 'fade-in 0.3s ease'
+-    }}>
+-      <div style={{
+-        backgroundColor: '#161426',
+-        border: '1px solid rgba(255,255,255,0.08)',
+-        borderRadius: '20px',
+-        padding: '24px',
+-        width: '100%',
+-        maxWidth: '320px',
+-        boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
+-        display: 'flex',
+-        flexDirection: 'column',
+-        gap: '16px'
+-      }}>
+-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+-          <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#fff', margin: 0 }}>Create Google Account</h3>
+-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}>
+-            <X size={20} />
+-          </button>
+-        </div>
+-
+-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+-            <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Selected Email</label>
+-            <input 
+-              disabled
+-              type="text" 
+-              value={email}
+-              style={{
+-                height: '40px',
+-                backgroundColor: 'rgba(255,255,255,0.02)',
+-                border: '1px solid rgba(255,255,255,0.04)',
+-                borderRadius: '10px',
+-                color: 'rgba(255,255,255,0.5)',
+-                padding: '0 12px',
+-                fontSize: '13px',
+-                outline: 'none',
+-                cursor: 'not-allowed'
+-              }}
+-            />
+-          </div>
+-
+-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+-            <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Full Name</label>
+-            <input 
+-              required
+-              type="text" 
+-              placeholder="e.g. Jahnavi"
+-              value={name}
+-              onChange={(e) => setName(e.target.value)}
+-              style={{
+-                height: '40px',
+-                backgroundColor: 'rgba(255,255,255,0.03)',
+-                border: '1px solid rgba(255,255,255,0.06)',
+-                borderRadius: '10px',
+-                color: '#fff',
+-                padding: '0 12px',
+-                fontSize: '13px',
+-                outline: 'none'
+-              }}
+-            />
+-          </div>
+-
+-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+-            <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Choose Password</label>
+-            <input 
+-              required
+-              type="password" 
+-              placeholder="ΓÇóΓÇóΓÇóΓÇóΓÇóΓÇóΓÇóΓÇó"
+-              value={password}
+-              onChange={(e) => setPassword(e.target.value)}
+-              style={{
+-                height: '40px',
+-                backgroundColor: 'rgba(255,255,255,0.03)',
+-                border: '1px solid rgba(255,255,255,0.06)',
+-                borderRadius: '10px',
+-                color: '#fff',
+-                padding: '0 12px',
+-                fontSize: '13px',
+-                outline: 'none'
+-              }}
+-            />
+-          </div>
+-
+-          <button 
+-            type="submit" 
+-            disabled={isSubmitting}
+-            className="btn-primary"
+-            style={{
+-              height: '40px',
+-              borderRadius: '10px',
+-              fontSize: '13px',
+-              fontWeight: 700,
+-              cursor: 'pointer',
+-              marginTop: '6px',
+-              width: '100%',
+-              boxShadow: 'none'
+-            }}
+-          >
+-            {isSubmitting ? 'Creating Account...' : 'Continue'}
+-          </button>
+-        </form>
+-      </div>
+-    </div>
+-  );
+-}
+-
+ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (token: string, user: any) => void; onLoginRoute: () => void }) {
+   const [name, setName] = useState('');
+   const [email, setEmail] = useState('');
+   const [password, setPassword] = useState('');
+   const [errorMsg, setErrorMsg] = useState('');
+   const [isSubmitting, setIsSubmitting] = useState(false);
+-  const [isGoogleOpen, setIsGoogleOpen] = useState(false);
+-  const [selectedGoogleEmail, setSelectedGoogleEmail] = useState('');
+-  const [selectedGoogleName, setSelectedGoogleName] = useState('');
+-  const [selectedGoogleIdToken, setSelectedGoogleIdToken] = useState('');
+-  const [isGooglePasswordOpen, setIsGooglePasswordOpen] = useState(false);
++
+ 
+   const handleSubmit = async (e: React.FormEvent) => {
+     e.preventDefault();
+@@ -1213,65 +918,47 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
+   };
+ 
+   const handleGoogleClick = async () => {
+-    const isCapacitor = typeof window !== 'undefined' && ((window as any).Capacitor || ((window as any).parent && (window as any).parent.Capacitor));
+-    if (isCapacitor) {
+-      try {
+-        setErrorMsg('');
+-        setIsSubmitting(true);
+-        console.log("[Google Auth] Initializing native signIn...");
+-        const googleUser = (await GoogleAuth.signIn()) as any;
+-        console.log("[Google Auth] Received native user:", googleUser);
+-        
+-        if (googleUser && googleUser.idToken) {
+-          setSelectedGoogleEmail(googleUser.email || '');
+-          setSelectedGoogleName(googleUser.name || 'Google User');
+-          setSelectedGoogleIdToken(googleUser.idToken || '');
+-          setIsGooglePasswordOpen(true);
+-        } else {
+-          setErrorMsg('Failed to obtain Google login credentials.');
+-        }
+-      } catch (err: any) {
+-        console.error("[Google Auth] Native error:", err);
+-        // Automatically fallback to mock Google account chooser on native signature failure
+-        setIsGoogleOpen(true);
+-      } finally {
+-        setIsSubmitting(false);
+-      }
+-    } else {
+-      setIsGoogleOpen(true);
+-    }
+-  };
+-
+-  const handleGoogleSelect = async (gEmail: string, gName: string) => {
+-    setSelectedGoogleEmail(gEmail);
+-    setSelectedGoogleName(gName);
+-    setSelectedGoogleIdToken('');
+-    setIsGooglePasswordOpen(true);
+-  };
+-
+-  const handleGoogleSubmitWithPassword = async (newName: string, pwd: string) => {
+     setErrorMsg('');
+     setIsSubmitting(true);
+     try {
+-      const res = await fetch(`${API_BASE}/auth/google`, {
+-        method: 'POST',
+-        headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({
+-          email: selectedGoogleEmail,
+-          name: newName,
+-          idToken: selectedGoogleIdToken || undefined,
+-          password: pwd
+-        })
+-      });
+-      const data = await res.json();
+-      if (res.ok) {
+-        setIsGooglePasswordOpen(false);
+-        onSignUpComplete(data.token, data.user);
++      console.log("[Google Auth] Initializing native signIn...");
++      const googleUser = (await GoogleAuth.signIn()) as any;
++      console.log("[Google Auth] Received Google user:", googleUser);
++      
++      if (googleUser && googleUser.email) {
++        const idToken = googleUser.authentication?.idToken || googleUser.idToken;
++        const res = await fetch(`${API_BASE}/auth/google`, {
++          method: 'POST',
++          headers: { 'Content-Type': 'application/json' },
++          body: JSON.stringify({
++            email: googleUser.email,
++            name: googleUser.name || 'Google User',
++            idToken: idToken || undefined
++          })
++        });
++        const data = await res.json();
++        if (res.ok) {
++          onSignUpComplete(data.token, data.user);
++        } else {
++          setErrorMsg(data.error || 'Google login failed.');
++        }
+       } else {
+-        setErrorMsg(data.error || 'Google login failed.');
++        setErrorMsg('Failed to obtain Google login credentials.');
++      }
++    } catch (err: any) {
++      console.error("[Google Auth] Error during signIn:", err);
++      const isCapacitor = typeof window !== 'undefined' && ((window as any).Capacitor || ((window as any).parent && (window as any).parent.Capacitor));
++      let errMsg = 'Google Sign-In failed.';
++      if (err && typeof err === 'object') {
++        errMsg = err.message || JSON.stringify(err);
++      } else if (typeof err === 'string') {
++        errMsg = err;
++      }
++      if (isCapacitor) {
++        setErrorMsg(`${errMsg} (Note: Ensure your local debug.keystore SHA-1 key is registered in the Google Developer Console / Firebase for this Android/iOS package).`);
++      } else {
++        setErrorMsg(errMsg);
+       }
+-    } catch (err) {
+-      setErrorMsg('Failed to connect to backend server.');
+     } finally {
+       setIsSubmitting(false);
+     }
+@@ -1288,15 +975,6 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
+       position: 'relative',
+       animation: 'fade-in 0.6s ease'
+     }}>
+-      <GoogleAccountSelectorModal isOpen={isGoogleOpen} onClose={() => setIsGoogleOpen(false)} onSelectAccount={handleGoogleSelect} />
+-      <GooglePasswordModal 
+-        isOpen={isGooglePasswordOpen} 
+-        email={selectedGoogleEmail} 
+-        initialName={selectedGoogleName}
+-        onClose={() => setIsGooglePasswordOpen(false)} 
+-        onSubmitDetails={handleGoogleSubmitWithPassword} 
+-        isSubmitting={isSubmitting} 
+-      />
+ 
+       <h2 style={{ fontSize: '28px', fontWeight: 900, color: '#fff', textAlign: 'center', marginBottom: '8px' }}>
+         Create Account
+@@ -1450,11 +1128,7 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
+   const [password, setPassword] = useState('');
+   const [errorMsg, setErrorMsg] = useState('');
+   const [isSubmitting, setIsSubmitting] = useState(false);
+-  const [isGoogleOpen, setIsGoogleOpen] = useState(false);
+-  const [selectedGoogleEmail, setSelectedGoogleEmail] = useState('');
+-  const [selectedGoogleName, setSelectedGoogleName] = useState('');
+-  const [selectedGoogleIdToken, setSelectedGoogleIdToken] = useState('');
+-  const [isGooglePasswordOpen, setIsGooglePasswordOpen] = useState(false);
++
+ 
+   const handleSubmit = async (e: React.FormEvent) => {
+     e.preventDefault();
+@@ -1483,65 +1157,47 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
+   };
+ 
+   const handleGoogleClick = async () => {
+-    const isCapacitor = typeof window !== 'undefined' && ((window as any).Capacitor || ((window as any).parent && (window as any).parent.Capacitor));
+-    if (isCapacitor) {
+-      try {
+-        setErrorMsg('');
+-        setIsSubmitting(true);
+-        console.log("[Google Auth] Initializing native signIn...");
+-        const googleUser = (await GoogleAuth.signIn()) as any;
+-        console.log("[Google Auth] Received native user:", googleUser);
+-        
+-        if (googleUser && googleUser.idToken) {
+-          setSelectedGoogleEmail(googleUser.email || '');
+-          setSelectedGoogleName(googleUser.name || 'Google User');
+-          setSelectedGoogleIdToken(googleUser.idToken || '');
+-          setIsGooglePasswordOpen(true);
+-        } else {
+-          setErrorMsg('Failed to obtain Google login credentials.');
+-        }
+-      } catch (err: any) {
+-        console.error("[Google Auth] Native error:", err);
+-        // Automatically fallback to mock Google account chooser on native signature failure
+-        setIsGoogleOpen(true);
+-      } finally {
+-        setIsSubmitting(false);
+-      }
+-    } else {
+-      setIsGoogleOpen(true);
+-    }
+-  };
+-
+-  const handleGoogleSelect = async (gEmail: string, gName: string) => {
+-    setSelectedGoogleEmail(gEmail);
+-    setSelectedGoogleName(gName);
+-    setSelectedGoogleIdToken('');
+-    setIsGooglePasswordOpen(true);
+-  };
+-
+-  const handleGoogleSubmitWithPassword = async (newName: string, pwd: string) => {
+     setErrorMsg('');
+     setIsSubmitting(true);
+     try {
+-      const res = await fetch(`${API_BASE}/auth/google`, {
+-        method: 'POST',
+-        headers: { 'Content-Type': 'application/json' },
+-        body: JSON.stringify({
+-          email: selectedGoogleEmail,
+-          name: newName,
+-          idToken: selectedGoogleIdToken || undefined,
+-          password: pwd
+-        })
+-      });
+-      const data = await res.json();
+-      if (res.ok) {
+-        setIsGooglePasswordOpen(false);
+-        onSignInComplete(data.token, data.user);
++      console.log("[Google Auth] Initializing native signIn...");
++      const googleUser = (await GoogleAuth.signIn()) as any;
++      console.log("[Google Auth] Received Google user:", googleUser);
++      
++      if (googleUser && googleUser.email) {
++        const idToken = googleUser.authentication?.idToken || googleUser.idToken;
++        const res = await fetch(`${API_BASE}/auth/google`, {
++          method: 'POST',
++          headers: { 'Content-Type': 'application/json' },
++          body: JSON.stringify({
++            email: googleUser.email,
++            name: googleUser.name || 'Google User',
++            idToken: idToken || undefined
++          })
++        });
++        const data = await res.json();
++        if (res.ok) {
++          onSignInComplete(data.token, data.user);
++        } else {
++          setErrorMsg(data.error || 'Google login failed.');
++        }
+       } else {
+-        setErrorMsg(data.error || 'Google login failed.');
++        setErrorMsg('Failed to obtain Google login credentials.');
++      }
++    } catch (err: any) {
++      console.error("[Google Auth] Error during signIn:", err);
++      const isCapacitor = typeof window !== 'undefined' && ((window as any).Capacitor || ((window as any).parent && (window as any).parent.Capacitor));
++      let errMsg = 'Google Sign-In failed.';
++      if (err && typeof err === 'object') {
++        errMsg = err.message || JSON.stringify(err);
++      } else if (typeof err === 'string') {
++        errMsg = err;
++      }
++      if (isCapacitor) {
++        setErrorMsg(`${errMsg} (Note: Ensure your local debug.keystore SHA-1 key is registered in the Google Developer Console / Firebase for this Android/iOS package).`);
++      } else {
++        setErrorMsg(errMsg);
+       }
+-    } catch (err) {
+-      setErrorMsg('Failed to connect to backend server.');
+     } finally {
+       setIsSubmitting(false);
+     }
+@@ -1558,15 +1214,6 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
+       position: 'relative',
+       animation: 'fade-in 0.6s ease'
+     }}>
+-      <GoogleAccountSelectorModal isOpen={isGoogleOpen} onClose={() => setIsGoogleOpen(false)} onSelectAccount={handleGoogleSelect} />
+-      <GooglePasswordModal 
+-        isOpen={isGooglePasswordOpen} 
+-        email={selectedGoogleEmail} 
+-        initialName={selectedGoogleName}
+-        onClose={() => setIsGooglePasswordOpen(false)} 
+-        onSubmitDetails={handleGoogleSubmitWithPassword} 
+-        isSubmitting={isSubmitting} 
+-      />
+ 
+       <h2 style={{ fontSize: '28px', fontWeight: 900, color: '#fff', textAlign: 'center', marginBottom: '8px' }}>
+         Welcome Back

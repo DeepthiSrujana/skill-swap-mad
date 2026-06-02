@@ -35,11 +35,58 @@ const localStorage = window.localStorage;
 
 const getBackendUrls = () => {
   const productionUrl = 'https://skill-swap-mad.onrender.com';
+  
+  // @ts-ignore
+  const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
+
+  // @ts-ignore
+  const devHostIp = typeof __DEV_HOST_IP__ !== 'undefined' ? __DEV_HOST_IP__ : '';
+
+  if (isCapacitor) {
+    const devIpUrl = devHostIp ? `http://${devHostIp}:3001` : '';
+    const emulatorUrl = `http://10.0.2.2:3001`;
+
+    return {
+      API_BASE: devIpUrl ? `${devIpUrl}/api` : `${emulatorUrl}/api`,
+      SOCKET_URL: devIpUrl || emulatorUrl,
+      FALLBACK_API_BASE: devIpUrl ? `${emulatorUrl}/api` : `${productionUrl}/api`,
+      FALLBACK_SOCKET_URL: devIpUrl ? emulatorUrl : productionUrl
+    };
+  }
+
+  // Detect if running locally (development or localhost loopback)
+  const isLocal = typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' || 
+    window.location.hostname === '127.0.0.1' || 
+    window.location.hostname.startsWith('192.168.') || 
+    window.location.hostname.startsWith('10.') || 
+    window.location.hostname.startsWith('172.')
+  );
+
+  let localHost = 'localhost';
+  if (typeof window !== 'undefined') {
+    localHost = window.location.hostname;
+  }
+
+  const localUrl = `http://${localHost}:3001`;
+  const devIpUrl = devHostIp ? `http://${devHostIp}:3001` : localUrl;
+
+  if (isLocal) {
+    console.log(`[SkillSwap] Connecting to LOCAL backend: ${localUrl}`);
+    return {
+      API_BASE: `${localUrl}/api`,
+      SOCKET_URL: localUrl,
+      FALLBACK_API_BASE: `${devIpUrl}/api`,
+      FALLBACK_SOCKET_URL: devIpUrl
+    };
+  }
+
+  console.log(`[SkillSwap] Connecting to PRODUCTION backend: ${productionUrl}`);
   return {
     API_BASE: `${productionUrl}/api`,
     SOCKET_URL: productionUrl,
-    FALLBACK_API_BASE: '',
-    FALLBACK_SOCKET_URL: ''
+    FALLBACK_API_BASE: `${devIpUrl}/api`,
+    FALLBACK_SOCKET_URL: devIpUrl
   };
 };
 
@@ -552,7 +599,9 @@ const generateFallbackQuestions = (skill: string): AssessmentQuestion[] => {
 };
 
 export default function App() {
-  const [currentFlowState, setCurrentFlowState] = useState<'splash' | 'onboarding' | 'signup' | 'signin' | 'setup-profile' | 'app'>('splash');
+  const [currentFlowState, setCurrentFlowState] = useState<'splash' | 'onboarding' | 'signup' | 'signin' | 'verify-otp' | 'setup-profile' | 'app'>('splash');
+  // @ts-ignore
+  const [otpEmail, setOtpEmail] = useState<string>('');
   const [currentTab, setCurrentTab] = useState<number>(0); // 0: Home, 1: Discover, 2: Chat, 3: Sessions, 4: Profile, 5: Community
   const [activeUser, setActiveUser] = useState<any>(null);
   const [appInitializing, setAppInitializing] = useState<boolean>(true);
@@ -607,7 +656,7 @@ export default function App() {
         try {
           console.log("[Google Auth] Initializing native plugin options at startup...");
           await GoogleAuth.initialize({
-            clientId: '8779954823976-8f3bdfa06e115ec.apps.googleusercontent.com',
+            clientId: '550830734952-ka3lfmnf8aaemhq05ik3gsekcm17heee.apps.googleusercontent.com',
             scopes: ['profile', 'email'],
             grantOfflineAccess: true
           });
@@ -617,28 +666,47 @@ export default function App() {
         }
       }
 
-      if (isCapacitor && FALLBACK_API_BASE) {
-        console.log("[SkillSwap] Performing network health check on primary IP:", API_BASE);
-        try {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 seconds timeout for fast failover
-          await fetch(`${API_BASE.replace('/api', '')}/api/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: '', password: '' }), // dummy call to verify network reachable
-            signal: controller.signal
-          }).catch(e => {
-            // If it returns a 400 Bad Request, it means we connected successfully!
-            if (e.name === 'AbortError' || e.message.includes('Failed to fetch')) {
-              throw e;
-            }
-          });
-          clearTimeout(timeoutId);
-          console.log("[SkillSwap] Dynamic IP network connection verified successfully!");
-        } catch (err) {
-          console.warn("[SkillSwap] Dynamic IP connection failed. Falling back to public tunnel:", FALLBACK_API_BASE);
-          API_BASE = FALLBACK_API_BASE;
-          SOCKET_URL = FALLBACK_SOCKET_URL;
+      if (isCapacitor) {
+        // @ts-ignore
+        const devHostIp = typeof __DEV_HOST_IP__ !== 'undefined' ? __DEV_HOST_IP__ : '';
+        const potentialUrls = [
+          `http://localhost:3001`,
+          devHostIp ? `http://${devHostIp}:3001` : '',
+          `http://10.0.2.2:3001`,
+          `https://skill-swap-mad.onrender.com`
+        ].filter(Boolean);
+
+        console.log("[SkillSwap] Probing backend URLs in sequence:", potentialUrls);
+        
+        let successfulUrl = '';
+        for (const url of potentialUrls) {
+          try {
+            console.log(`[SkillSwap] Probing network health on: ${url}`);
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 seconds fast probe
+            await fetch(`${url}/api/auth/login`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email: '', password: '' }),
+              signal: controller.signal
+            });
+            clearTimeout(timeoutId);
+            successfulUrl = url;
+            console.log(`[SkillSwap] Connection verified successfully on: ${url}`);
+            break;
+          } catch (e) {
+            console.log(`[SkillSwap] Probe failed on: ${url}`);
+          }
+        }
+
+        if (successfulUrl) {
+          API_BASE = `${successfulUrl}/api`;
+          SOCKET_URL = successfulUrl;
+          console.log("[SkillSwap] Network configured to:", API_BASE);
+        } else {
+          console.warn("[SkillSwap] All local probes failed. Falling back to production cloud.");
+          API_BASE = `https://skill-swap-mad.onrender.com/api`;
+          SOCKET_URL = `https://skill-swap-mad.onrender.com`;
         }
       }
 
@@ -653,7 +721,12 @@ export default function App() {
           if (res.ok) {
             const data = await res.json();
             setActiveUser(data);
-            setCurrentFlowState('app');
+            if (data && data.title) {
+              setCurrentFlowState('app');
+            } else {
+              console.log("[SkillSwap] Profile incomplete, directing to Setup Profile Screen");
+              setCurrentFlowState('setup-profile');
+            }
           } else {
             localStorage.removeItem('skillswap_token');
             setCurrentFlowState('onboarding');
@@ -683,7 +756,12 @@ export default function App() {
   const handleAuthSuccess = (token: string, user: any) => {
     localStorage.setItem('skillswap_token', token);
     setActiveUser(user);
-    setCurrentFlowState('app');
+    if (user && user.title) {
+      setCurrentFlowState('app');
+    } else {
+      console.log("[SkillSwap] Profile incomplete on login, directing to Setup Profile Screen");
+      setCurrentFlowState('setup-profile');
+    }
   };
 
   if (currentFlowState === 'splash' || appInitializing) {
@@ -717,11 +795,7 @@ export default function App() {
             )}
             {currentFlowState === 'signup' && (
               <SignUpScreen 
-                onSignUpComplete={(token, user) => {
-                  localStorage.setItem('skillswap_token', token);
-                  setActiveUser(user);
-                  setCurrentFlowState('setup-profile');
-                }} 
+                onSignUpComplete={handleAuthSuccess} 
                 onLoginRoute={() => setCurrentFlowState('signin')}
               />
             )}
@@ -731,8 +805,16 @@ export default function App() {
                 onSignUpRoute={() => setCurrentFlowState('signup')}
               />
             )}
+            {currentFlowState === 'verify-otp' && (
+              <VerifyOtpScreen 
+                email={otpEmail}
+                onVerificationSuccess={handleAuthSuccess}
+                onBackToLogin={() => setCurrentFlowState('signin')}
+              />
+            )}
             {currentFlowState === 'setup-profile' && (
               <SetupProfileScreen 
+                activeUser={activeUser}
                 setActiveUser={setActiveUser}
                 onComplete={() => setCurrentFlowState('app')}
               />
@@ -1691,6 +1773,254 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
 }
 
 // =========================================================================
+// ✉️ OTP VERIFICATION SCREEN
+// =========================================================================
+interface VerifyOtpScreenProps {
+  email: string;
+  onVerificationSuccess: (token: string, user: any) => void;
+  onBackToLogin: () => void;
+}
+
+function VerifyOtpScreen({ email, onVerificationSuccess, onBackToLogin }: VerifyOtpScreenProps) {
+  const [otp, setOtp] = useState<string[]>(['', '', '', '']);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isResending, setIsResending] = useState(false);
+  const [countdown, setCountdown] = useState(0);
+
+  const inputRefs = [
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null)
+  ];
+
+  useEffect(() => {
+    // Focus first input on mount
+    inputRefs[0].current?.focus();
+  }, []);
+
+  useEffect(() => {
+    let timer: any;
+    if (countdown > 0) {
+      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [countdown]);
+
+  const handleChange = (index: number, value: string) => {
+    if (!/^\d*$/.test(value)) return; // Allow only numbers
+    const newOtp = [...otp];
+    // Take only the last character if pasted or typed
+    newOtp[index] = value.substring(value.length - 1);
+    setOtp(newOtp);
+
+    // Auto-focus next input
+    if (value && index < 3) {
+      inputRefs[index + 1].current?.focus();
+    }
+  };
+
+  const handleKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !otp[index] && index > 0) {
+      inputRefs[index - 1].current?.focus();
+    }
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    e.preventDefault();
+    const pastedData = e.clipboardData.getData('text').trim();
+    if (!/^\d{4}$/.test(pastedData)) return; // Ensure exactly 4 digits
+    const digits = pastedData.split('');
+    setOtp(digits);
+    inputRefs[3].current?.focus();
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const otpCode = otp.join('');
+    if (otpCode.length !== 4) {
+      setErrorMsg('Please enter a 4-digit OTP.');
+      return;
+    }
+
+    setErrorMsg('');
+    setSuccessMsg('');
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/verify-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, otp: otpCode })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccessMsg(data.message || 'Account verified successfully!');
+        setTimeout(() => {
+          onVerificationSuccess(data.token, data.user);
+        }, 1200);
+      } else {
+        setErrorMsg(data.error || 'OTP verification failed.');
+      }
+    } catch (err) {
+      setErrorMsg('Failed to connect to backend server.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (countdown > 0) return;
+    setErrorMsg('');
+    setSuccessMsg('');
+    setIsResending(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/auth/resend-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccessMsg(data.message || 'A new 4-digit OTP has been sent.');
+        setCountdown(59); // Start 60-second cooldown
+      } else {
+        setErrorMsg(data.error || 'Failed to resend OTP.');
+      }
+    } catch (err) {
+      setErrorMsg('Failed to connect to backend server.');
+    } finally {
+      setIsResending(false);
+    }
+  };
+
+  return (
+    <div style={{
+      flex: 1,
+      display: 'flex',
+      flexDirection: 'column',
+      padding: '32px 24px',
+      justifyContent: 'center',
+      height: '100%',
+      position: 'relative',
+      animation: 'fade-in 0.6s ease'
+    }}>
+      <h2 style={{ fontSize: '28px', fontWeight: 900, color: '#fff', textAlign: 'center', marginBottom: '8px' }}>
+        Verify Email
+      </h2>
+      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px', textAlign: 'center', marginBottom: '8px' }}>
+        We have sent a 4-digit One-Time Password (OTP) to:
+      </p>
+      <p style={{ color: '#6366F1', fontSize: '14px', fontWeight: 700, textAlign: 'center', marginBottom: '32px', wordBreak: 'break-all' }}>
+        {email}
+      </p>
+
+      {errorMsg && (
+        <div style={{
+          backgroundColor: 'rgba(248, 113, 113, 0.1)',
+          border: '1px solid rgba(248, 113, 113, 0.3)',
+          color: '#F87171',
+          padding: '12px',
+          borderRadius: '10px',
+          fontSize: '13px',
+          fontWeight: 500,
+          marginBottom: '20px',
+          textAlign: 'center'
+        }}>
+          ⚠️ {errorMsg}
+        </div>
+      )}
+
+      {successMsg && (
+        <div style={{
+          backgroundColor: 'rgba(74, 222, 128, 0.1)',
+          border: '1px solid rgba(74, 222, 128, 0.3)',
+          color: '#4ADE80',
+          padding: '12px',
+          borderRadius: '10px',
+          fontSize: '13px',
+          fontWeight: 500,
+          marginBottom: '20px',
+          textAlign: 'center'
+        }}>
+          ✓ {successMsg}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '16px' }} onPaste={handlePaste}>
+          {otp.map((digit, idx) => (
+            <input
+              key={idx}
+              ref={inputRefs[idx]}
+              type="text"
+              pattern="[0-9]*"
+              inputMode="numeric"
+              required
+              value={digit}
+              onChange={(e) => handleChange(idx, e.target.value)}
+              onKeyDown={(e) => handleKeyDown(idx, e)}
+              style={{
+                width: '56px',
+                height: '56px',
+                backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: '14px',
+                textAlign: 'center',
+                color: '#fff',
+                fontSize: '24px',
+                fontWeight: 800,
+                outline: 'none',
+                transition: 'all 0.2s ease',
+                boxShadow: digit ? '0 0 15px rgba(99, 102, 241, 0.15)' : 'none',
+                borderColor: digit ? '#6366F1' : 'rgba(255,255,255,0.06)'
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#6366F1'}
+              onBlur={(e) => e.target.style.borderColor = digit ? '#6366F1' : 'rgba(255,255,255,0.06)'}
+            />
+          ))}
+        </div>
+
+        <button type="submit" disabled={isSubmitting} className="btn-primary" style={{ width: '100%', opacity: isSubmitting ? 0.7 : 1 }}>
+          {isSubmitting ? 'Verifying...' : 'Verify & Continue'}
+        </button>
+      </form>
+
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', marginTop: '32px' }}>
+        <button 
+          onClick={handleResendOtp} 
+          disabled={isResending || countdown > 0}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: (isResending || countdown > 0) ? 'rgba(255,255,255,0.25)' : '#8B5CF6',
+            fontSize: '13px',
+            fontWeight: 700,
+            cursor: (isResending || countdown > 0) ? 'not-allowed' : 'pointer'
+          }}
+        >
+          {countdown > 0 ? `Resend OTP in ${countdown}s` : 'Resend OTP'}
+        </button>
+
+        <button onClick={onBackToLogin} style={{
+          background: 'none',
+          border: 'none',
+          color: 'rgba(255,255,255,0.4)',
+          fontSize: '13px',
+          fontWeight: 600,
+          cursor: 'pointer'
+        }}>
+          Back to Log In
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// =========================================================================
 // 🧭 MAIN APPLICATION TAB CONTROLLER SHELL
 // =========================================================================
 function MainAppShell({ 
@@ -1718,6 +2048,7 @@ function MainAppShell({
   const [activeSessionRoom, setActiveSessionRoom] = useState<any | null>(null);
   const [ratingTarget, setRatingTarget] = useState<{ userId: string; userName: string } | null>(null);
   const [selectedRating, setSelectedRating] = useState<number>(5);
+  const [selectedTrustScore, setSelectedTrustScore] = useState<number>(100);
   const [isSubmittingRating, setIsSubmittingRating] = useState(false);
   const [ratingSessionId, setRatingSessionId] = useState<string | null>(null);
   const [sessionRefreshTrigger, setSessionRefreshTrigger] = useState(0);
@@ -1745,7 +2076,8 @@ function MainAppShell({
         },
         body: JSON.stringify({
           targetUserId: ratingTarget.userId,
-          rating: selectedRating
+          rating: selectedRating,
+          trustScore: `${selectedTrustScore}%`
         })
       });
       
@@ -1801,6 +2133,7 @@ function MainAppShell({
   const [callStatus, setCallStatus] = useState<'idle' | 'outgoing' | 'incoming' | 'connected'>('idle');
   const [callPeerId, setCallPeerId] = useState<string>('');
   const [callPeerName, setCallPeerName] = useState<string>('');
+  const [callPeerPicture, setCallPeerPicture] = useState<string>('');
   const [micMuted, setMicMuted] = useState(false);
   const [videoDisabled, setVideoDisabled] = useState(false);
   const [isUsingVirtualStream, setIsUsingVirtualStream] = useState(false);
@@ -1844,6 +2177,7 @@ function MainAppShell({
     setCallStatus('idle');
     setCallPeerId('');
     setCallPeerName('');
+    setCallPeerPicture('');
     setMicMuted(false);
     setVideoDisabled(false);
     setIsUsingVirtualStream(false);
@@ -2147,7 +2481,7 @@ function MainAppShell({
   useEffect(() => {
     if (!socket) return;
 
-    const handleIncomingCall = (data: { from: string; callerName: string }) => {
+    const handleIncomingCall = (data: { from: string; callerName: string; callerPicture?: string }) => {
       console.log("[Socket.io] Incoming call from:", data.callerName, "Current status:", callStatusRef.current);
       if (callStatusRef.current !== 'idle') {
         socket.emit('call-decline', { to: data.from });
@@ -2156,6 +2490,7 @@ function MainAppShell({
       setCallStatus('incoming');
       setCallPeerId(data.from);
       setCallPeerName(data.callerName);
+      setCallPeerPicture(data.callerPicture || '');
 
       // Trigger native browser notification
       if ('Notification' in window && Notification.permission === 'granted') {
@@ -2232,12 +2567,17 @@ function MainAppShell({
     };
   }, [socket]);
 
-  const handleInitiateCall = (partnerId: string, partnerName: string) => {
+  const handleInitiateCall = (partnerId: string, partnerName: string, partnerPicture?: string) => {
     if (!socket) return;
     setCallStatus('outgoing');
     setCallPeerId(partnerId);
     setCallPeerName(partnerName);
-    socket.emit('call-user', { to: partnerId, callerName: activeUser?.name || 'A SkillSwapper' });
+    setCallPeerPicture(partnerPicture || '');
+    socket.emit('call-user', { 
+      to: partnerId, 
+      callerName: activeUser?.name || 'A SkillSwapper', 
+      callerPicture: activeUser?.profilePicture || activeUser?.profileImage || activeUser?.avatarUrl || '' 
+    });
   };
 
   const handleAcceptCall = () => {
@@ -2678,6 +3018,39 @@ function MainAppShell({
               ))}
             </div>
 
+            <div style={{ marginTop: '14px', borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: '14px', marginBottom: '14px' }}>
+              <h4 style={{ fontSize: '13px', fontWeight: 800, color: '#fff', marginBottom: '4px' }}>
+                Rate Trustworthiness
+              </h4>
+              <p style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', marginBottom: '10px' }}>
+                Select their trust score based on session reliability:
+              </p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px' }}>
+                {[0, 25, 50, 75, 100].map((score) => (
+                  <button
+                    key={score}
+                    type="button"
+                    onClick={() => setSelectedTrustScore(score)}
+                    style={{
+                      padding: '8px 0',
+                      borderRadius: '10px',
+                      fontSize: '11px',
+                      fontWeight: 700,
+                      backgroundColor: selectedTrustScore === score ? '#6366F1' : 'rgba(255,255,255,0.02)',
+                      border: '1px solid',
+                      borderColor: selectedTrustScore === score ? '#6366F1' : 'rgba(255,255,255,0.08)',
+                      color: selectedTrustScore === score ? '#fff' : 'rgba(255,255,255,0.6)',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      flex: 1
+                    }}
+                  >
+                    {score}%
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div style={{ display: 'flex', gap: '10px', marginTop: '8px' }}>
               <button 
                 onClick={() => setRatingTarget(null)}
@@ -2745,9 +3118,14 @@ function MainAppShell({
                 fontWeight: 900,
                 boxShadow: '0 0 50px rgba(99, 102, 241, 0.4)',
                 animation: 'bounce-gentle 2.5s infinite ease-in-out',
-                border: '3px solid rgba(255,255,255,0.1)'
+                border: '3px solid rgba(255,255,255,0.1)',
+                overflow: 'hidden'
               }}>
-                {callPeerName.substring(0, 1).toUpperCase()}
+                {callPeerPicture ? (
+                  <img src={callPeerPicture} alt={callPeerName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  callPeerName.substring(0, 1).toUpperCase()
+                )}
               </div>
             )}
 
@@ -3202,11 +3580,19 @@ function HomeScreenView({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: '16px',
-            fontWeight: 800,
-            color: '#fff'
+            overflow: 'hidden',
+            boxShadow: '0 0 15px rgba(139, 92, 246, 0.15)',
+            border: '1.5px solid #8B5CF6'
           }}>
-            {userInitials}
+            {activeUser?.profilePicture || activeUser?.profileImage || activeUser?.avatarUrl ? (
+              <img 
+                src={activeUser.profilePicture || activeUser.profileImage || activeUser.avatarUrl} 
+                alt={userName} 
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+              />
+            ) : (
+              <span style={{ fontSize: '16px', fontWeight: 800, color: '#fff' }}>{userInitials}</span>
+            )}
           </div>
           <div>
             <p style={{ color: 'rgba(255,255,255,0.38)', fontSize: '12px', fontWeight: 500 }}>Welcome back,</p>
@@ -3540,11 +3926,13 @@ function DiscoverScreenView({ initialSearch = '' }: { initialSearch?: string }) 
     }
   }, [initialSearch]);
 
-  const filteredSwappers = swappers.filter(s => 
-    s.teaches.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.wants.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    s.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredSwappers = swappers.filter(s => {
+    const teaches = s.teaches ? String(s.teaches).toLowerCase() : '';
+    const wants = s.wants ? String(s.wants).toLowerCase() : '';
+    const name = s.name ? String(s.name).toLowerCase() : '';
+    const query = searchQuery.toLowerCase();
+    return teaches.includes(query) || wants.includes(query) || name.includes(query);
+  });
 
   const handleRequestSwap = async (swapper: any) => {
     const token = localStorage.getItem('skillswap_token');
@@ -3741,9 +4129,14 @@ function DiscoverScreenView({ initialSearch = '' }: { initialSearch?: string }) 
                     justifyContent: 'center',
                     fontWeight: 800,
                     color: '#fff',
-                    fontSize: '14px'
+                    fontSize: '14px',
+                    overflow: 'hidden'
                   }}>
-                    {swapper.avatar}
+                    {swapper.profilePicture || swapper.profileImage || swapper.avatarUrl ? (
+                      <img src={swapper.profilePicture || swapper.profileImage || swapper.avatarUrl} alt={swapper.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      swapper.avatar
+                    )}
                   </div>
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -3874,7 +4267,7 @@ function ChatScreenView({
   socket: Socket | null; 
   activeUserId: string; 
   activeUser: any;
-  onInitiateCall: (partnerId: string, partnerName: string) => void; 
+  onInitiateCall: (partnerId: string, partnerName: string, partnerPicture?: string) => void; 
   onOpenCommunity: () => void;
 }) {
   const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
@@ -4140,7 +4533,13 @@ function ChatScreenView({
                   fontSize: '14px',
                   position: 'relative'
                 }}>
-                  {chat.isGroup ? chat.emoji : chat.partnerName.substring(0, 1).toUpperCase()}
+                  {chat.isGroup ? (
+                    chat.emoji
+                  ) : chat.partnerPicture || chat.partnerImage ? (
+                    <img src={chat.partnerPicture || chat.partnerImage} alt={chat.partnerName} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                  ) : (
+                    chat.partnerName.substring(0, 1).toUpperCase()
+                  )}
                   <span style={{
                     position: 'absolute',
                     bottom: 0,
@@ -4261,7 +4660,13 @@ function ChatScreenView({
             fontWeight: 800,
             fontSize: '13px'
           }}>
-            {activePartner.isGroup ? activePartner.emoji : activePartner.partnerName.substring(0, 1).toUpperCase()}
+            {activePartner.isGroup ? (
+              activePartner.emoji
+            ) : activePartner.partnerPicture || activePartner.partnerImage ? (
+              <img src={activePartner.partnerPicture || activePartner.partnerImage} alt={activePartner.partnerName} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+            ) : (
+              activePartner.partnerName.substring(0, 1).toUpperCase()
+            )}
           </div>
           <div>
             <h4 style={{ fontSize: '14px', fontWeight: 700, color: 'white', margin: 0 }}>{activePartner.partnerName}</h4>
@@ -4274,7 +4679,7 @@ function ChatScreenView({
         {/* Launch Video button call */}
         {!activePartner.isGroup && (
           <button 
-            onClick={() => onInitiateCall(activePartnerId || '', activePartner.partnerName)}
+            onClick={() => onInitiateCall(activePartnerId || '', activePartner.partnerName, activePartner.partnerPicture || activePartner.partnerImage)}
             style={{ background: 'none', border: 'none', color: '#6366F1', cursor: 'pointer' }}
           >
             <Video size={20} />
@@ -4522,6 +4927,7 @@ function SessionsScreenView({
                 liveSoon={s.liveSoon} 
                 status={s.status}
                 isInbound={s.isInbound}
+                partnerPicture={s.partnerPicture}
                 onAccept={() => handleAcceptSession(s.id)}
                 onCancel={() => handleCancelSession(s.id)}
               />
@@ -4539,6 +4945,7 @@ function SessionsScreenView({
                 date={s.date} 
                 liveSoon={s.liveSoon} 
                 status={s.status}
+                partnerPicture={s.partnerPicture}
                 onJoin={() => onJoinSessionRoom(s)}
                 onRate={() => onRateSession({ userId: s.partnerId, userName: s.partnerName }, s.id)}
               />
@@ -4557,6 +4964,7 @@ function SessionsScreenView({
                 liveSoon={s.liveSoon} 
                 status="completed"
                 isDone={true} 
+                partnerPicture={s.partnerPicture}
                 onRate={() => onRateSession({ userId: s.partnerId, userName: s.partnerName }, s.id)}
               />
             ))
@@ -4577,6 +4985,7 @@ function SessionInfoCard({
   isDone,
   status,
   isInbound,
+  partnerPicture,
   onJoin,
   onAccept,
   onCancel,
@@ -4589,6 +4998,7 @@ function SessionInfoCard({
   isDone?: boolean;
   status?: 'pending' | 'accepted' | 'completed';
   isInbound?: boolean;
+  partnerPicture?: string;
   onJoin?: () => void;
   onAccept?: () => void;
   onCancel?: () => void;
@@ -4641,7 +5051,28 @@ function SessionInfoCard({
         )}
       </div>
 
-      <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: '13px' }}>With {partner}</p>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div style={{
+          width: '24px',
+          height: '24px',
+          borderRadius: '50%',
+          backgroundColor: '#6366F1',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '10px',
+          fontWeight: 800,
+          color: '#fff',
+          overflow: 'hidden'
+        }}>
+          {partnerPicture ? (
+            <img src={partnerPicture} alt={partner} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            partner.substring(0, 1).toUpperCase()
+          )}
+        </div>
+        <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: '13px', margin: 0 }}>With {partner}</p>
+      </div>
       
       <div style={{ height: '1px', backgroundColor: 'rgba(255,255,255,0.06)' }} />
       
@@ -4776,7 +5207,7 @@ function ProfileScreenView({
   const [aiChatInput, setAiChatInput] = useState("");
   const [aiIsTyping, setAiIsTyping] = useState(false);
 
-  const handleSendAiMessage = () => {
+  const handleSendAiMessage = async () => {
     const txt = aiChatInput.trim();
     if (!txt) return;
 
@@ -4785,22 +5216,88 @@ function ProfileScreenView({
     setAiChatInput("");
     setAiIsTyping(true);
 
-    setTimeout(() => {
-      let replyText = "I understand. I am here to help you navigate SkillSwap. Could you please specify your query?";
-      const lower = txt.toLowerCase();
-      if (lower.includes("wallet") || lower.includes("token")) {
-        replyText = "Sure, I can help you with that. I have queued a secure request to disconnect and remove your wallet tokens from your profile. This will be updated shortly.";
-      } else if (lower.includes("password") || lower.includes("security")) {
-        replyText = "To manage your security, please navigate to the Account Settings menu in the profile section where you can configure password changes and secure keys.";
-      } else if (lower.includes("skill")) {
-        replyText = "You can add or remove skills you can teach or learn directly on your main Profile screen by tapping '+ Add Skill' or the cross icon next to any skill.";
+    try {
+      const res = await fetch(`${API_BASE}/support/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: txt })
+      });
+      const data = await res.json();
+      if (res.ok && data.reply) {
+        setAiChatMessages(prev => [...prev, { text: data.reply, isMe: false }]);
+      } else {
+        setAiChatMessages(prev => [...prev, { text: "Sorry, I am having trouble connecting to my support servers right now. Please try again.", isMe: false }]);
       }
-
-      setAiChatMessages(prev => [...prev, { text: replyText, isMe: false }]);
+    } catch (e) {
+      setAiChatMessages(prev => [...prev, { text: "Connection error. Please check your internet connection or server status.", isMe: false }]);
+    } finally {
       setAiIsTyping(false);
-    }, 1000);
+    }
   };
   
+  // Password Change States
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+  const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
+
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError('');
+    setPasswordSuccess('');
+
+    if (newPassword !== confirmPassword) {
+      setPasswordError('New passwords do not match.');
+      return;
+    }
+
+    if (newPassword.length < 4) {
+      setPasswordError('New password must be at least 4 characters long.');
+      return;
+    }
+
+    const token = localStorage.getItem('skillswap_token');
+    if (!token) {
+      setPasswordError('Session expired. Please log in again.');
+      return;
+    }
+
+    setIsSubmittingPassword(true);
+    try {
+      const res = await fetch(`${API_BASE}/users/change-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPasswordSuccess('Password changed successfully.');
+        setCurrentPassword('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setTimeout(() => {
+          setIsChangingPassword(false);
+          setPasswordSuccess('');
+        }, 1500);
+      } else {
+        setPasswordError(data.error || 'Failed to change password.');
+      }
+    } catch (err: any) {
+      setPasswordError(`Connection error (${API_BASE}): ${err.message || err}`);
+    } finally {
+      setIsSubmittingPassword(false);
+    }
+  };
+
   // Edit Profile States
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(activeUser?.title || '');
@@ -4809,7 +5306,9 @@ function ProfileScreenView({
   const [editAvailability, setEditAvailability] = useState(activeUser?.availability || '');
   const [editLanguage, setEditLanguage] = useState(activeUser?.language || '');
   const [editExperience, setEditExperience] = useState(activeUser?.experience || '');
+  const [editProfilePicture, setEditProfilePicture] = useState(activeUser?.profilePicture || '');
   const [isSaving, setIsSaving] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Initialize edit fields when edit mode opens
   const handleStartEdit = () => {
@@ -4819,6 +5318,7 @@ function ProfileScreenView({
     setEditAvailability(activeUser?.availability || '');
     setEditLanguage(activeUser?.language || '');
     setEditExperience(activeUser?.experience || '');
+    setEditProfilePicture(activeUser?.profilePicture || '');
     setIsEditing(true);
   };
 
@@ -4840,7 +5340,8 @@ function ProfileScreenView({
           about: editAbout,
           availability: editAvailability,
           language: editLanguage,
-          experience: editExperience
+          experience: editExperience,
+          profilePicture: editProfilePicture
         })
       });
       if (res.ok) {
@@ -4858,7 +5359,7 @@ function ProfileScreenView({
   const userName = activeUser?.name || 'John Doe';
   const userInitials = userName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase();
   const userEmail = activeUser?.email || 'john@example.com';
-  const trustScore = activeUser?.trustScore || '98%';
+  const trustScore = activeUser?.trustScore || '0%';
   const swapsDone = activeUser?.swapsCount || '0';
   const rating = activeUser?.ratingValue || '0.0';
   const communities = activeUser?.joinedCircles?.length || 0;
@@ -5003,9 +5504,14 @@ function ProfileScreenView({
             justifyContent: 'center',
             fontSize: '28px',
             fontWeight: 800,
-            color: '#fff'
+            color: '#fff',
+            overflow: 'hidden'
           }}>
-            {userInitials}
+            {activeUser?.profilePicture || activeUser?.profileImage || activeUser?.avatarUrl ? (
+              <img src={activeUser.profilePicture || activeUser.profileImage || activeUser.avatarUrl} alt={userName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              userInitials
+            )}
           </div>
           <span style={{
             position: 'absolute',
@@ -5122,6 +5628,81 @@ function ProfileScreenView({
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: '#161426', padding: '20px', borderRadius: '20px', border: '1px solid rgba(255,255,255,0.06)' }}>
           <h4 style={{ fontSize: '14px', fontWeight: 800, margin: '0 0 4px 0' }}>Edit Profile Details</h4>
           
+          {/* Edit Profile Picture Row */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px', marginBottom: '10px', borderBottom: '1px solid rgba(255,255,255,0.04)', paddingBottom: '16px' }}>
+            <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700, letterSpacing: '0.5px' }}>Profile Picture</label>
+            
+            {/* Main preview circle */}
+            <div style={{
+              position: 'relative',
+              width: '72px',
+              height: '72px',
+              borderRadius: '50%',
+              border: '2px solid #8B5CF6',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#1E1B4B',
+              overflow: 'hidden'
+            }}>
+              {editProfilePicture ? (
+                <img src={editProfilePicture} alt="Selected Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <User size={30} style={{ color: 'rgba(255,255,255,0.4)' }} />
+              )}
+            </div>
+
+            {/* Custom file input */}
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+              <input 
+                type="file" 
+                ref={fileInputRef}
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                      const base64Str = event.target?.result as string;
+                      if (base64Str) {
+                        setEditProfilePicture(base64Str);
+                      }
+                    };
+                    reader.readAsDataURL(file);
+                  }
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                  border: '1px solid rgba(99, 102, 241, 0.3)',
+                  borderRadius: '10px',
+                  padding: '6px 14px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  color: '#6366F1',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  transition: 'all 0.2s ease',
+                  boxShadow: '0 4px 12px rgba(99, 102, 241, 0.12)'
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.2)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.1)';
+                }}
+              >
+                📷 Choose Photo from Device
+              </button>
+            </div>
+          </div>
+
           <div>
             <label style={{ display: 'block', fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>Professional Title</label>
             <input 
@@ -5649,19 +6230,147 @@ function ProfileScreenView({
               </h3>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '12px', color: 'rgba(255,255,255,0.7)', marginTop: '8px' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>Password status</label>
-                  <div style={{ padding: '10px 12px', backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>••••••••</span>
-                    <span style={{ color: '#6366F1', fontWeight: 700, cursor: 'pointer' }}>Change</span>
+                {isChangingPassword ? (
+                  <form onSubmit={handleChangePasswordSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)' }}>Current Password</label>
+                      <input 
+                        type="password" 
+                        required
+                        placeholder="Current password"
+                        value={currentPassword}
+                        onChange={(e) => setCurrentPassword(e.target.value)}
+                        style={{
+                          height: '34px',
+                          backgroundColor: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '8px',
+                          padding: '0 10px',
+                          color: '#fff',
+                          fontSize: '11px',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)' }}>New Password</label>
+                      <input 
+                        type="password" 
+                        required
+                        placeholder="New password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        style={{
+                          height: '34px',
+                          backgroundColor: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '8px',
+                          padding: '0 10px',
+                          color: '#fff',
+                          fontSize: '11px',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)' }}>Confirm New Password</label>
+                      <input 
+                        type="password" 
+                        required
+                        placeholder="Confirm new password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        style={{
+                          height: '34px',
+                          backgroundColor: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '8px',
+                          padding: '0 10px',
+                          color: '#fff',
+                          fontSize: '11px',
+                          outline: 'none'
+                        }}
+                      />
+                    </div>
+
+                    {passwordError && (
+                      <span style={{ fontSize: '10px', color: '#F87171', textAlign: 'center' }}>⚠️ {passwordError}</span>
+                    )}
+                    {passwordSuccess && (
+                      <span style={{ fontSize: '10px', color: '#4ADE80', textAlign: 'center' }}>✓ {passwordSuccess}</span>
+                    )}
+
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '4px' }}>
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setIsChangingPassword(false);
+                          setCurrentPassword('');
+                          setNewPassword('');
+                          setConfirmPassword('');
+                          setPasswordError('');
+                          setPasswordSuccess('');
+                        }}
+                        style={{
+                          flex: 1,
+                          height: '32px',
+                          backgroundColor: 'transparent',
+                          border: '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: '8px',
+                          color: 'rgba(255,255,255,0.6)',
+                          fontSize: '11px',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button 
+                        type="submit"
+                        disabled={isSubmittingPassword}
+                        style={{
+                          flex: 1,
+                          height: '32px',
+                          backgroundColor: '#6366F1',
+                          border: 'none',
+                          borderRadius: '8px',
+                          color: '#fff',
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          opacity: isSubmittingPassword ? 0.7 : 1
+                        }}
+                      >
+                        {isSubmittingPassword ? 'Saving...' : 'Save'}
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div>
+                    <label style={{ display: 'block', fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>Password status</label>
+                    <div style={{ padding: '10px 12px', backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>••••••••</span>
+                      <span 
+                        onClick={() => {
+                          setIsChangingPassword(true);
+                          setPasswordError('');
+                          setPasswordSuccess('');
+                        }}
+                        style={{ color: '#6366F1', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Change
+                      </span>
+                    </div>
+                    {passwordSuccess && (
+                      <span style={{ fontSize: '10px', color: '#4ADE80', display: 'block', marginTop: '4px', textAlign: 'center' }}>✓ {passwordSuccess}</span>
+                    )}
                   </div>
-                </div>
+                )}
                 
                 <div>
-                  <label style={{ display: 'block', fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>Two-Factor Authentication</label>
+                  <label style={{ display: 'block', fontSize: '10px', color: 'rgba(255,255,255,0.4)', marginBottom: '4px' }}>App Version</label>
                   <div style={{ padding: '10px 12px', backgroundColor: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.04)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>Secure via Email OTP</span>
-                    <span style={{ color: '#10B981', fontWeight: 700 }}>Enabled</span>
+                    <span>SkillSwap Client</span>
+                    <span style={{ color: '#6366F1', fontWeight: 700 }}>v1.0.4</span>
                   </div>
                 </div>
 
@@ -6120,7 +6829,7 @@ function AssessmentScreen({
     };
 
     // Boost trust score by +2% if they pass (up to 100%)
-    let currentScoreVal = parseInt(activeUser.trustScore || '98');
+    let currentScoreVal = parseInt(activeUser.trustScore || '0');
     let boostedTrust = Math.min(100, currentScoreVal + 2) + '%';
 
     try {
@@ -6440,12 +7149,16 @@ function AssessmentScreen({
 }
 
 function SetupProfileScreen({ 
+  activeUser,
   setActiveUser, 
   onComplete 
 }: { 
+  activeUser: any;
   setActiveUser: (u: any) => void; 
   onComplete: () => void; 
 }) {
+  const [profilePicture, setProfilePicture] = useState(activeUser?.profilePicture || activeUser?.profileImage || activeUser?.avatarUrl || '');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState('');
   const [bio, setBio] = useState('');
   const [about, setAbout] = useState('');
@@ -6468,8 +7181,8 @@ function SetupProfileScreen({
     const token = localStorage.getItem('skillswap_token');
     if (!token) return;
 
-    const teachesList: string[] = [];
-    const wantsList: string[] = [];
+    const teachesList = activeUser?.teaches || ['General / Academics'];
+    const wantsList = activeUser?.wants || ['Programming / Coding'];
 
     try {
       const res = await fetch(`${API_BASE}/users/profile`, {
@@ -6487,7 +7200,8 @@ function SetupProfileScreen({
           availability,
           language,
           experience,
-          trustScore: '98%',
+          profilePicture,
+          trustScore: '0%',
           swapsCount: '0',
           ratingValue: '0.0'
         })
@@ -6543,6 +7257,83 @@ function SetupProfileScreen({
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', paddingBottom: '30px' }}>
+        {/* Profile Picture Picker Row */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px', marginBottom: '10px' }}>
+          <label style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Profile Picture</label>
+          
+          {/* Main preview circle */}
+          <div style={{
+            position: 'relative',
+            width: '86px',
+            height: '86px',
+            borderRadius: '50%',
+            border: '2.5px solid #8B5CF6',
+            boxShadow: '0 0 20px rgba(139, 92, 246, 0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: '#1E1B4B',
+            overflow: 'hidden'
+          }}>
+            {profilePicture ? (
+              <img src={profilePicture} alt="Selected Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <User size={36} style={{ color: 'rgba(255,255,255,0.4)' }} />
+            )}
+          </div>
+
+          {/* Custom Upload Button */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
+            <input 
+              type="file" 
+              ref={fileInputRef}
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onload = (event) => {
+                    const base64Str = event.target?.result as string;
+                    if (base64Str) {
+                      setProfilePicture(base64Str);
+                    }
+                  };
+                  reader.readAsDataURL(file);
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              style={{
+                backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                border: '1px solid rgba(99, 102, 241, 0.3)',
+                borderRadius: '12px',
+                padding: '8px 18px',
+                fontSize: '12px',
+                fontWeight: 800,
+                color: '#6366F1',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: 'all 0.2s ease',
+                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.15)'
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.1)';
+              }}
+            >
+              📷 Choose Photo from Device
+            </button>
+            <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)', marginTop: '4px' }}>Select an image file from your device</span>
+          </div>
+        </div>
+
         <div>
           <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.5px' }}>Professional Title</label>
           <input
@@ -6696,7 +7487,7 @@ function ActiveSessionRoom({
 }: { 
   session: any; 
   onLeave: () => void; 
-  onInitiateCall: (partnerId: string, partnerName: string) => void;
+  onInitiateCall: (partnerId: string, partnerName: string, partnerPicture?: string) => void;
   socket: Socket | null;
   activeUserId: string;
   onCompleteSession: (ratingTarget: { userId: string; userName: string }) => void;
@@ -6822,7 +7613,7 @@ function ActiveSessionRoom({
           <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>Initiate WebRTC calling in real-time</span>
         </div>
         <button 
-          onClick={() => onInitiateCall(session.partnerId, session.partnerName)}
+          onClick={() => onInitiateCall(session.partnerId, session.partnerName, session.partnerPicture)}
           style={{
             backgroundColor: '#10B981',
             color: '#000',
