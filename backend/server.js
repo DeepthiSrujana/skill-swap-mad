@@ -1020,9 +1020,8 @@ function calculateMatchScore(currentUser, targetUser) {
 
 // Average verification score helper
 function calculateAvgScore(u) {
-  if (!u.skillScores) return "85%";
+  if (!u.skillScores || Object.keys(u.skillScores).length === 0) return "0%";
   const keys = Object.keys(u.skillScores);
-  if (keys.length === 0) return "85%";
   const sum = keys.reduce((acc, key) => acc + u.skillScores[key], 0);
   const avg = Math.round(sum / keys.length);
   return `${avg}%`;
@@ -1030,11 +1029,18 @@ function calculateAvgScore(u) {
 
 // Total learners count helper
 function calculateLearnersCount(u) {
-  if (!u.skillLearners) return "10";
-  const keys = Object.keys(u.skillLearners);
-  if (keys.length === 0) return "10";
-  const sum = keys.reduce((acc, key) => acc + parseInt(u.skillLearners[key] || 0, 10), 0);
-  return String(sum || 10);
+  // If user has actual skillLearners recorded, sum them up
+  if (u.skillLearners && Object.keys(u.skillLearners).length > 0) {
+    const keys = Object.keys(u.skillLearners);
+    const sum = keys.reduce((acc, key) => acc + parseInt(u.skillLearners[key] || 0, 10), 0);
+    return String(sum);
+  }
+  // Otherwise, if they have taken MCQ (have skillScores), show a default of 12
+  if (u.skillScores && Object.keys(u.skillScores).length > 0) {
+    return "12";
+  }
+  // Otherwise, if they have not taken MCQ at all, it must be 0!
+  return "0";
 }
 
 // Discover dynamic users endpoint
@@ -1065,7 +1071,7 @@ app.get('/api/users/discover', authenticateToken, (req, finalRes) => {
       language: u.language || "English",
       experience: u.experience || "1+ Years",
       score: calculateAvgScore(u),
-      rating: u.ratingValue || "5.0",
+      rating: (u.skillScores && Object.keys(u.skillScores).length > 0) ? (u.ratingValue || "5.0") : "0.0",
       learnersCount: calculateLearnersCount(u)
     };
   });

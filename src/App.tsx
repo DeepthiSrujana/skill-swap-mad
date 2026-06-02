@@ -5993,8 +5993,8 @@ function ProfileScreenView({
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {teachesList.map((skill: string, index: number) => {
                 const skillScore = activeUser?.skillScores?.[skill];
-                const skillRating = activeUser?.skillRatings?.[skill] || (skillScore !== undefined ? '4.9' : undefined);
-                const skillLearners = activeUser?.skillLearners?.[skill] || (skillScore !== undefined ? '12' : undefined);
+                const skillRating = activeUser?.skillRatings?.[skill] || (skillScore !== undefined ? '4.9' : '0.0');
+                const skillLearners = activeUser?.skillLearners?.[skill] || (skillScore !== undefined ? '12' : '0');
                 return (
                   <div 
                     key={index}
@@ -6037,18 +6037,14 @@ function ProfileScreenView({
                         <X size={12} />
                       </button>
                     </div>
-                    {skillScore !== undefined && (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                        <span style={{ fontSize: '10px', color: '#4ADE80', fontWeight: 700 }}>
-                          Score: {skillScore}%
-                        </span>
-                        {skillRating && (
-                          <span style={{ fontSize: '9px', color: '#FBBF24', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                            ★ {skillRating} ({skillLearners} learnt)
-                          </span>
-                        )}
-                      </div>
-                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                      <span style={{ fontSize: '10px', color: skillScore !== undefined ? '#4ADE80' : 'rgba(255,255,255,0.4)', fontWeight: 700 }}>
+                        Score: {skillScore !== undefined ? `${skillScore}%` : '0%'}
+                      </span>
+                      <span style={{ fontSize: '9px', color: skillScore !== undefined ? '#FBBF24' : 'rgba(255,255,255,0.3)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                        ★ {skillRating} ({skillLearners} learnt)
+                      </span>
+                    </div>
                   </div>
                 );
               })}
@@ -6119,8 +6115,8 @@ function ProfileScreenView({
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
               {wantsList.map((skill: string, index: number) => {
                 const skillScore = activeUser?.skillScores?.[skill];
-                const skillRating = activeUser?.skillRatings?.[skill] || (skillScore !== undefined ? '4.9' : undefined);
-                const skillLearners = activeUser?.skillLearners?.[skill] || (skillScore !== undefined ? '12' : undefined);
+                const skillRating = activeUser?.skillRatings?.[skill] || (skillScore !== undefined ? '4.9' : '0.0');
+                const skillLearners = activeUser?.skillLearners?.[skill] || (skillScore !== undefined ? '12' : '0');
                 return (
                   <div 
                     key={index}
@@ -6163,18 +6159,14 @@ function ProfileScreenView({
                         <X size={12} />
                       </button>
                     </div>
-                    {skillScore !== undefined && (
-                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
-                        <span style={{ fontSize: '10px', color: '#4ADE80', fontWeight: 700 }}>
-                          Score: {skillScore}%
-                        </span>
-                        {skillRating && (
-                          <span style={{ fontSize: '9px', color: '#FBBF24', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                            ★ {skillRating} ({skillLearners} learnt)
-                          </span>
-                        )}
-                      </div>
-                    )}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
+                      <span style={{ fontSize: '10px', color: skillScore !== undefined ? '#4ADE80' : 'rgba(255,255,255,0.4)', fontWeight: 700 }}>
+                        Score: {skillScore !== undefined ? `${skillScore}%` : '0%'}
+                      </span>
+                      <span style={{ fontSize: '9px', color: skillScore !== undefined ? '#FBBF24' : 'rgba(255,255,255,0.3)', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
+                        ★ {skillRating} ({skillLearners} learnt)
+                      </span>
+                    </div>
                   </div>
                 );
               })}
