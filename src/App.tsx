@@ -4803,6 +4803,7 @@ function SessionsScreenView({
   refreshTrigger?: number;
 }) {
   const [activeSubTab, setActiveSubTab] = useState(0); // 0: Pending, 1: Upcoming, 2: Completed
+  const [acceptPopupPartner, setAcceptPopupPartner] = useState<string | null>(null);
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -4829,7 +4830,7 @@ function SessionsScreenView({
     fetchSessions();
   }, [refreshTrigger]);
 
-  const handleAcceptSession = async (sessionId: string) => {
+  const handleAcceptSession = async (sessionId: string, partnerName: string) => {
     const token = localStorage.getItem('skillswap_token');
     if (!token) return;
 
@@ -4843,6 +4844,10 @@ function SessionsScreenView({
         body: JSON.stringify({ status: 'accepted' })
       });
       if (res.ok) {
+        setAcceptPopupPartner(partnerName);
+        setTimeout(() => {
+          setAcceptPopupPartner(null);
+        }, 3000);
         fetchSessions();
       }
     } catch (err) {
@@ -4875,6 +4880,37 @@ function SessionsScreenView({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', animation: 'fade-in 0.4s ease' }}>
+      
+      {/* Accept Alert Notification Toast */}
+      {acceptPopupPartner && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 'calc(100% - 48px)',
+          maxWidth: '372px',
+          backgroundColor: '#161426',
+          border: '1px solid rgba(99, 102, 241, 0.4)',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5), 0 0 15px rgba(99, 102, 241, 0.1)',
+          color: '#818CF8',
+          padding: '14px 16px',
+          borderRadius: '14px',
+          fontSize: '13px',
+          fontWeight: 600,
+          textAlign: 'center',
+          animation: 'fade-in 0.3s ease',
+          zIndex: 9999,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '8px'
+        }}>
+          <CheckCircle size={18} style={{ color: '#818CF8', flexShrink: 0 }} />
+          <span>Swap request accepted! Connected with {acceptPopupPartner}.</span>
+        </div>
+      )}
+
       <h3 style={{ fontSize: '20px', fontWeight: 800 }}>Your Sessions</h3>
 
       {/* Tab Selectors */}
@@ -4942,7 +4978,7 @@ function SessionsScreenView({
                 status={s.status}
                 isInbound={s.isInbound}
                 partnerPicture={s.partnerPicture}
-                onAccept={() => handleAcceptSession(s.id)}
+                onAccept={() => handleAcceptSession(s.id, s.partnerName)}
                 onCancel={() => handleCancelSession(s.id)}
               />
             ))
