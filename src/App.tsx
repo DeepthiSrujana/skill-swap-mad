@@ -1227,7 +1227,7 @@ function GooglePasswordModal({ isOpen, email, initialName, onClose, onSubmitDeta
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Choose Password</label>
+            <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Enter Password</label>
             <input 
               required
               type="password" 
