@@ -763,7 +763,7 @@ app.put('/api/users/profile', authenticateToken, (req, finalRes) => {
 
 // Rate a User / Swapper
 app.post('/api/users/rate', authenticateToken, (req, finalRes) => {
-  const { targetUserId, rating, trustScore } = req.body;
+  const { targetUserId, rating, trustScore, sessionId } = req.body;
   if (!targetUserId || rating === undefined) {
     return finalRes.status(400).json({ error: 'Target User ID and rating are required.' });
   }
@@ -794,6 +794,20 @@ app.post('/api/users/rate', authenticateToken, (req, finalRes) => {
     // Dynamic trust score based on received ratings (avg * 20)
     const trustScoreNum = Math.min(100, Math.round(avg * 20));
     user.trustScore = `${trustScoreNum}%`;
+  }
+
+  // Increment learners count for the rated skill
+  if (sessionId) {
+    const session = db.sessions.find(s => s.userId === targetUserId && (s.id === sessionId || s.groupId === sessionId || s.groupId === db.sessions.find(x => x.id === sessionId)?.groupId));
+    if (session) {
+      const skillName = session.title.split(' with ')[0].trim();
+      if (!user.skillLearners) {
+        user.skillLearners = {};
+      }
+      const currentCount = parseInt(user.skillLearners[skillName] || 0, 10);
+      user.skillLearners[skillName] = currentCount + 1;
+      console.log(`[Backend] Incremented learners count for user ${targetUserId} skill "${skillName}" to ${user.skillLearners[skillName]} because they were rated.`);
+    }
   }
 
   writeDatabase(db);
@@ -1035,11 +1049,7 @@ function calculateLearnersCount(u) {
     const sum = keys.reduce((acc, key) => acc + parseInt(u.skillLearners[key] || 0, 10), 0);
     return String(sum);
   }
-  // Otherwise, if they have taken MCQ (have skillScores), show a default of 12
-  if (u.skillScores && Object.keys(u.skillScores).length > 0) {
-    return "12";
-  }
-  // Otherwise, if they have not taken MCQ at all, it must be 0!
+  // Otherwise, if they have taken MCQ at all, default is now 0 until rated
   return "0";
 }
 

@@ -2094,7 +2094,8 @@ function MainAppShell({
         body: JSON.stringify({
           targetUserId: ratingTarget.userId,
           rating: selectedRating,
-          trustScore: `${selectedTrustScore}%`
+          trustScore: `${selectedTrustScore}%`,
+          sessionId: ratingSessionId
         })
       });
       
@@ -5994,7 +5995,7 @@ function ProfileScreenView({
               {teachesList.map((skill: string, index: number) => {
                 const skillScore = activeUser?.skillScores?.[skill];
                 const skillRating = activeUser?.skillRatings?.[skill] || (skillScore !== undefined ? '4.9' : '0.0');
-                const skillLearners = activeUser?.skillLearners?.[skill] || (skillScore !== undefined ? '12' : '0');
+                const skillLearners = activeUser?.skillLearners?.[skill] || '0';
                 return (
                   <div 
                     key={index}
@@ -6116,7 +6117,7 @@ function ProfileScreenView({
               {wantsList.map((skill: string, index: number) => {
                 const skillScore = activeUser?.skillScores?.[skill];
                 const skillRating = activeUser?.skillRatings?.[skill] || (skillScore !== undefined ? '4.9' : '0.0');
-                const skillLearners = activeUser?.skillLearners?.[skill] || (skillScore !== undefined ? '12' : '0');
+                const skillLearners = activeUser?.skillLearners?.[skill] || '0';
                 return (
                   <div 
                     key={index}
@@ -7047,7 +7048,7 @@ function AssessmentScreen({
     const currentLearners = activeUser.skillLearners || {};
     const updatedLearners = {
       ...currentLearners,
-      [skillName]: 3
+      [skillName]: 0
     };
 
     // Boost trust score by +2% if they pass (up to 100%)
