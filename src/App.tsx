@@ -2175,6 +2175,7 @@ function MainAppShell({
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const localVideoElRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoElRef = useRef<HTMLVideoElement | null>(null);
+  const iceCandidatesQueueRef = useRef<any[]>([]);
 
   // Swap video sources when enlarged state changes
   useEffect(() => {
@@ -2214,6 +2215,21 @@ function MainAppShell({
 
     if (localVideoElRef.current) localVideoElRef.current.srcObject = null;
     if (remoteVideoElRef.current) remoteVideoElRef.current.srcObject = null;
+    iceCandidatesQueueRef.current = [];
+  };
+
+  const processQueuedIceCandidates = async () => {
+    if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription && peerConnectionRef.current.remoteDescription.type) {
+      console.log(`[WebRTC] Processing ${iceCandidatesQueueRef.current.length} queued ICE candidates...`);
+      for (const candidate of iceCandidatesQueueRef.current) {
+        try {
+          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.error("Error adding queued ICE candidate:", e);
+        }
+      }
+      iceCandidatesQueueRef.current = [];
+    }
   };
 
   const localVideoCallbackRef = (el: HTMLVideoElement | null) => {
@@ -2445,12 +2461,28 @@ function MainAppShell({
     }
 
     pc.ontrack = (event) => {
-      console.log("[WebRTC] Remote track received", event.streams[0]);
-      if (event.streams[0]) {
-        remoteStreamRef.current = event.streams[0];
-        if (remoteVideoElRef.current) {
-          remoteVideoElRef.current.srcObject = event.streams[0];
+      console.log("[WebRTC] Remote track received. Streams:", event.streams);
+      let stream = event.streams[0];
+      if (!stream) {
+        console.log("[WebRTC] No stream in ontrack event. Creating/reusing fallback remote MediaStream.");
+        if (!remoteStreamRef.current) {
+          remoteStreamRef.current = new MediaStream();
         }
+        remoteStreamRef.current.addTrack(event.track);
+        stream = remoteStreamRef.current;
+      } else {
+        remoteStreamRef.current = stream;
+      }
+
+      if (remoteVideoElRef.current) {
+        remoteVideoElRef.current.srcObject = stream;
+        console.log("[WebRTC] Attached remote stream to remoteVideoElRef.");
+      }
+      
+      // Keep state in sync if pip is showing remote stream
+      if (localVideoElRef.current && isLocalEnlarged) {
+        localVideoElRef.current.srcObject = stream;
+        console.log("[WebRTC] Attached remote stream to localVideoElRef (PIP).");
       }
     };
 
@@ -2486,6 +2518,7 @@ function MainAppShell({
         if (socket) {
           socket.emit('webrtc-answer', { to: targetPeerId, answer });
         }
+        await processQueuedIceCandidates();
       } catch (e) {
         console.error("Failed to handle offer / create answer:", e);
       }
@@ -2540,6 +2573,7 @@ function MainAppShell({
       if (peerConnectionRef.current) {
         try {
           await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+          await processQueuedIceCandidates();
         } catch (e) {
           console.error("Error setting remote description:", e);
         }
@@ -2548,12 +2582,15 @@ function MainAppShell({
 
     const handleIceCandidate = async (data: { candidate: any }) => {
       console.log("[Socket.io] ICE candidate received");
-      if (peerConnectionRef.current) {
+      if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription && peerConnectionRef.current.remoteDescription.type) {
         try {
           await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
         } catch (e) {
           console.error("Error adding ICE candidate:", e);
         }
+      } else {
+        console.log("[WebRTC] Remote description not set yet. Queueing ICE candidate.");
+        iceCandidatesQueueRef.current.push(data.candidate);
       }
     };
 
