@@ -5234,6 +5234,30 @@ function ProfileScreenView({
       setAiIsTyping(false);
     }
   };
+
+  const sendFaqMessage = async (question: string) => {
+    const userMsg = { text: question, isMe: true };
+    setAiChatMessages(prev => [...prev, userMsg]);
+    setAiIsTyping(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/support/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: question })
+      });
+      const data = await res.json();
+      if (res.ok && data.reply) {
+        setAiChatMessages(prev => [...prev, { text: data.reply, isMe: false }]);
+      } else {
+        setAiChatMessages(prev => [...prev, { text: "Sorry, I am having trouble connecting to my support servers right now. Please try again.", isMe: false }]);
+      }
+    } catch (e) {
+      setAiChatMessages(prev => [...prev, { text: "Connection error. Please check your internet connection or server status.", isMe: false }]);
+    } finally {
+      setAiIsTyping(false);
+    }
+  };
   
   // Password Change States
   const [isChangingPassword, setIsChangingPassword] = useState(false);
@@ -6080,7 +6104,7 @@ function ProfileScreenView({
             <div className="glass-card" style={{
               width: '100%',
               maxWidth: '300px',
-              height: '380px',
+              height: '470px',
               backgroundColor: '#161426',
               border: '1px solid rgba(255, 255, 255, 0.08)',
               borderRadius: '24px',
@@ -6151,8 +6175,59 @@ function ProfileScreenView({
                 )}
               </div>
               
+              {/* FAQ Suggestions */}
+              <div style={{
+                display: 'flex',
+                gap: '6px',
+                overflowX: 'auto',
+                padding: '8px 0',
+                margin: '6px 0 4px 0',
+                whiteSpace: 'nowrap',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none'
+              }} className="no-scrollbar">
+                {[
+                  { text: '⚙️ Profile Setup', q: 'How do I set up my profile and add skills?' },
+                  { text: '🤝 Skill Swaps', q: 'How do skill swaps work?' },
+                  { text: '📅 Sessions', q: 'How do I schedule and run swap sessions?' },
+                  { text: '🔔 Notifications', q: 'Where do I view my notifications?' },
+                  { text: '🔒 Account Issues', q: 'How do I change my password or delete my account?' },
+                  { text: '⚠️ Reporting Users', q: 'How do I report a user for safety issues?' }
+                ].map((faq, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => sendFaqMessage(faq.q)}
+                    style={{
+                      display: 'inline-block',
+                      backgroundColor: 'rgba(99, 102, 241, 0.1)',
+                      border: '1px solid rgba(99, 102, 241, 0.25)',
+                      borderRadius: '12px',
+                      padding: '5px 10px',
+                      fontSize: '9.5px',
+                      fontWeight: 800,
+                      color: '#a5b4fc',
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.2)';
+                      e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.5)';
+                      e.currentTarget.style.color = '#fff';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.1)';
+                      e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.25)';
+                      e.currentTarget.style.color = '#a5b4fc';
+                    }}
+                  >
+                    {faq.text}
+                  </button>
+                ))}
+              </div>
+
               {/* Input Area */}
-              <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+              <div style={{ display: 'flex', gap: '6px', marginTop: '4px' }}>
                 <input 
                   type="text"
                   value={aiChatInput}

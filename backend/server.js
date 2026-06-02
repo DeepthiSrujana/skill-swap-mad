@@ -900,7 +900,11 @@ Here is a list of app rules and features to guide you:
   let reply = "Hello! I am your SkillSwap AI Support Assistant. I'm here to help you get the most out of SkillSwap. Can you please clarify your request?";
 
   if (lower.includes("delete") || lower.includes("account") || lower.includes("clear") || lower.includes("purge")) {
-    reply = "To permanently delete your account, click the 'Delete Account' button inside the Settings menu. This instantly wipes all your personal data, sessions, notifications, and chat history permanently from the system.";
+    reply = "To permanently delete your account, click the 'Delete Account' button inside the Settings menu. This instantly wipes all your personal data, sessions, notifications, and chat history permanently from the database.";
+  } else if (lower.includes("notification") || lower.includes("notif") || lower.includes("bell") || lower.includes("alert")) {
+    reply = "You will receive push and in-app alerts in the Notifications tab whenever you receive a message, a swap request, a session confirmation, or pass an MCQ assessment.";
+  } else if (lower.includes("report") || lower.includes("block") || lower.includes("abuse") || lower.includes("flag") || lower.includes("safety")) {
+    reply = "To report a user, visit their profile via Discover or Chat, tap the Settings icon on their profile, and click 'Report User'. Our safety team will review their activity within 24 hours.";
   } else if (lower.includes("trust") || lower.includes("score") || lower.includes("rate") || lower.includes("rating")) {
     reply = "Your Trust Score starts at 0% and increases when you successfully pass MCQ skill assessments or receive good partner reviews (up to 100%) after finishing swap sessions.";
   } else if (lower.includes("assessment") || lower.includes("mcq") || lower.includes("quiz") || lower.includes("test")) {
@@ -911,8 +915,8 @@ Here is a list of app rules and features to guide you:
     reply = "You can update your password securely inside Account Settings under the Profile settings tab. Simply enter your current password and your new password.";
   } else if (lower.includes("chat") || lower.includes("message") || lower.includes("partner")) {
     reply = "You can chat with potential partners by browsing profiles in the Discover tab and tapping 'Chat'. Active conversations are listed in your Chat tab.";
-  } else if (lower.includes("skill") || lower.includes("teach") || lower.includes("want") || lower.includes("learn")) {
-    reply = "To add skills you teaches or wants, go to your Profile and tap '+ Add Skill'. You will be given a quick verification assessment to update your profile list.";
+  } else if (lower.includes("skill") || lower.includes("teach") || lower.includes("want") || lower.includes("learn") || lower.includes("setup") || lower.includes("profile")) {
+    reply = "To set up your profile or add skills, go to your Profile and tap '+ Add Skill'. You will be given a quick verification assessment to update your profile list.";
   } else if (lower.includes("hello") || lower.includes("hi") || lower.includes("hey")) {
     reply = "Hello! I am your SkillSwap AI Assistant. How can I help you navigate through skill swaps, assessments, or account settings today?";
   }
