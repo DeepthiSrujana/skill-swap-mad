@@ -791,6 +791,9 @@ export default function App() {
   return (
     <div style={{ display: 'flex', justifyContent: 'center', backgroundColor: '#09080e', minHeight: '100vh' }}>
       <div className="phone-viewport" style={{ position: 'relative' }}>
+        
+
+
         {activeAssessment ? (
           <AssessmentScreen 
             assessment={activeAssessment}
@@ -2152,6 +2155,7 @@ function MainAppShell({
   const [videoDisabled, setVideoDisabled] = useState(false);
   const [isUsingVirtualStream, setIsUsingVirtualStream] = useState(false);
   const [isLocalEnlarged, setIsLocalEnlarged] = useState(false);
+  const [callAlertMsg, setCallAlertMsg] = useState<string | null>(null);
 
   // Sync refs to avoid stale closure bugs in Socket.io event listeners
   const callStatusRef = useRef(callStatus);
@@ -2539,6 +2543,9 @@ function MainAppShell({
       setCallPeerName(data.callerName);
       setCallPeerPicture(data.callerPicture || '');
 
+      setCallAlertMsg(`Incoming call from ${data.callerName} 📞`);
+      setTimeout(() => setCallAlertMsg(null), 4000);
+
       // Trigger native browser notification
       if ('Notification' in window && Notification.permission === 'granted') {
         new Notification(`Incoming Video Call! 📞`, {
@@ -2559,6 +2566,8 @@ function MainAppShell({
       console.log("[Socket.io] Call accepted by peer:", data.peerId);
       setCallStatus('connected');
       setCallPeerId(data.peerId);
+      setCallAlertMsg(`Call connected! 📞`);
+      setTimeout(() => setCallAlertMsg(null), 4000);
       await setupWebRTCPeer(true, undefined, data.peerId);
     };
 
@@ -2624,6 +2633,8 @@ function MainAppShell({
     setCallPeerId(partnerId);
     setCallPeerName(partnerName);
     setCallPeerPicture(partnerPicture || '');
+    setCallAlertMsg(`Calling ${partnerName}... 📞`);
+    setTimeout(() => setCallAlertMsg(null), 4000);
     socket.emit('call-user', { 
       to: partnerId, 
       callerName: activeUser?.name || 'A SkillSwapper', 
@@ -2832,6 +2843,10 @@ function MainAppShell({
         return [notif, ...prev];
       });
 
+      // Display global in-app floating pop-up/alert toast
+      setCallAlertMsg(`${notif.title || 'Notification!'} ${notif.message || ''}`);
+      setTimeout(() => setCallAlertMsg(null), 5000);
+
       // Show native system browser notification
       if ('Notification' in window && Notification.permission === 'granted') {
         new Notification(notif.title || "New Notification! 🚀", {
@@ -2901,6 +2916,59 @@ function MainAppShell({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, position: 'relative', height: '100%' }}>
       
+      {/* Global Real-Time In-App Alert Notification Toast */}
+      {callAlertMsg && (
+        <div style={{
+          position: 'absolute',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 'calc(100% - 32px)',
+          maxWidth: '356px',
+          backgroundColor: '#161426',
+          border: `1px solid ${
+            callAlertMsg.includes('📞') || callAlertMsg.includes('Calling') || callAlertMsg.includes('Incoming') || callAlertMsg.includes('Call')
+              ? 'rgba(239, 68, 68, 0.45)'
+              : callAlertMsg.includes('Accepted') || callAlertMsg.includes('🎉') || callAlertMsg.includes('Success') || callAlertMsg.includes('sent')
+                ? 'rgba(74, 222, 128, 0.45)'
+                : 'rgba(99, 102, 241, 0.45)'
+          }`,
+          boxShadow: `0 10px 30px rgba(0, 0, 0, 0.55), 0 0 15px ${
+            callAlertMsg.includes('📞') || callAlertMsg.includes('Calling') || callAlertMsg.includes('Incoming') || callAlertMsg.includes('Call')
+              ? 'rgba(239, 68, 68, 0.12)'
+              : callAlertMsg.includes('Accepted') || callAlertMsg.includes('🎉') || callAlertMsg.includes('Success') || callAlertMsg.includes('sent')
+                ? 'rgba(74, 222, 128, 0.12)'
+                : 'rgba(99, 102, 241, 0.12)'
+          }`,
+          color: callAlertMsg.includes('📞') || callAlertMsg.includes('Calling') || callAlertMsg.includes('Incoming') || callAlertMsg.includes('Call')
+            ? '#F87171'
+            : callAlertMsg.includes('Accepted') || callAlertMsg.includes('🎉') || callAlertMsg.includes('Success') || callAlertMsg.includes('sent')
+              ? '#4ADE80'
+              : '#818CF8',
+          padding: '14px 16px',
+          borderRadius: '16px',
+          fontSize: '12px',
+          fontWeight: 600,
+          textAlign: 'left',
+          animation: 'fade-in 0.3s ease',
+          zIndex: 99999,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px',
+          backdropFilter: 'blur(12px)',
+          lineHeight: '1.4'
+        }}>
+          {callAlertMsg.includes('📞') || callAlertMsg.includes('Calling') || callAlertMsg.includes('Incoming') || callAlertMsg.includes('Call') ? (
+            <Phone size={18} style={{ color: '#F87171', flexShrink: 0 }} />
+          ) : callAlertMsg.includes('Accepted') || callAlertMsg.includes('🎉') || callAlertMsg.includes('Success') || callAlertMsg.includes('sent') ? (
+            <CheckCircle size={18} style={{ color: '#4ADE80', flexShrink: 0 }} />
+          ) : (
+            <Sparkles size={18} style={{ color: '#818CF8', flexShrink: 0 }} />
+          )}
+          <span style={{ flex: 1 }}>{callAlertMsg}</span>
+        </div>
+      )}
+
       {/* Content Stack */}
       <div className="scrollable-content">
         {currentTab === 0 && (
@@ -4112,7 +4180,7 @@ function DiscoverScreenView({ initialSearch = '' }: { initialSearch?: string }) 
       {/* Request Alert Notification Toast */}
       {requestSentTo && (
         <div style={{
-          position: 'fixed',
+          position: 'absolute',
           top: '20px',
           left: '50%',
           transform: 'translateX(-50%)',
@@ -4921,7 +4989,7 @@ function SessionsScreenView({
       {/* Accept Alert Notification Toast */}
       {acceptPopupPartner && (
         <div style={{
-          position: 'fixed',
+          position: 'absolute',
           top: '20px',
           left: '50%',
           transform: 'translateX(-50%)',
