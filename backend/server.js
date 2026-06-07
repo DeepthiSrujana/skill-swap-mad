@@ -1001,6 +1001,7 @@ async function sendFcmNotification(targetUserId, title, body, dataPayload = {}) 
   const FCM_SERVER_KEY = process.env.FCM_SERVER_KEY || 'AAAAc9zS9wU:APA91bF97c5M2-nZ7bZ2Y4pT...'; // placeholder/fallback key
 
   try {
+    const channelId = dataPayload.type === 'call' ? 'calls' : 'default';
     const response = await fetch('https://fcm.googleapis.com/fcm/send', {
       method: 'POST',
       headers: {
@@ -1014,10 +1015,12 @@ async function sendFcmNotification(targetUserId, title, body, dataPayload = {}) 
           body: body,
           sound: 'default',
           badge: '1',
-          icon: 'ic_launcher'
+          icon: 'ic_launcher',
+          android_channel_id: channelId,
+          click_action: 'FCM_PLUGIN_ACTIVITY'
         },
         data: {
-          click_action: 'FLUTTER_NOTIFICATION_CLICK',
+          click_action: 'FCM_PLUGIN_ACTIVITY',
           id: String(Date.now()),
           title: title,
           body: body,
