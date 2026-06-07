@@ -1001,7 +1001,7 @@ async function sendFcmNotification(targetUserId, title, body, dataPayload = {}) 
   const FCM_SERVER_KEY = process.env.FCM_SERVER_KEY || 'AAAAc9zS9wU:APA91bF97c5M2-nZ7bZ2Y4pT...'; // placeholder/fallback key
 
   try {
-    const channelId = dataPayload.type === 'call' ? 'calls' : 'default';
+    const channelId = dataPayload.type === 'call' ? 'calls_v2' : 'default_v2';
     const response = await fetch('https://fcm.googleapis.com/fcm/send', {
       method: 'POST',
       headers: {

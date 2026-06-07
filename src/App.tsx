@@ -673,24 +673,24 @@ export default function App() {
 
             // Create high importance channels to ensure notification sound works on Android 8.0+
             await LocalNotifications.createChannel({
-              id: 'default',
+              id: 'default_v2',
               name: 'Default Channel',
               description: 'General notifications with sound',
               importance: 5,
               sound: 'default',
               visibility: 1,
               vibration: true
-            }).catch(err => console.error("Error creating channel 'default':", err));
+            }).catch(err => console.error("Error creating channel 'default_v2':", err));
 
             await LocalNotifications.createChannel({
-              id: 'calls',
+              id: 'calls_v2',
               name: 'Call Channel',
               description: 'Urgent incoming call notifications',
               importance: 5,
               sound: 'default',
               visibility: 1,
               vibration: true
-            }).catch(err => console.error("Error creating channel 'calls':", err));
+            }).catch(err => console.error("Error creating channel 'calls_v2':", err));
           });
         } catch (localErr) {
           console.error("[Local Notification] Setup failed:", localErr);
@@ -739,7 +739,7 @@ export default function App() {
                       body: notification.body || notification.data?.body || '',
                       id: Math.floor(Math.random() * 100000),
                       sound: 'default',
-                      channelId: 'default',
+                      channelId: 'default_v2',
                       smallIcon: 'ic_launcher',
                       largeIcon: 'ic_launcher'
                     }
@@ -927,7 +927,7 @@ const triggerIncorrectPasswordNotification = () => {
             body: `The password you entered is incorrect. Please try again.`,
             id: 111111,
             sound: 'default',
-            channelId: 'default',
+            channelId: 'default_v2',
             smallIcon: 'ic_launcher',
             largeIcon: 'ic_launcher'
           }
@@ -2772,7 +2772,7 @@ function MainAppShell({
               body: `${data.callerName} is calling you on SkillSwap. Tap to accept!`,
               id: 999999,
               sound: 'default',
-              channelId: 'calls',
+              channelId: 'calls_v2',
               smallIcon: 'ic_launcher',
               largeIcon: 'ic_launcher',
               extra: data
@@ -3020,7 +3020,7 @@ function MainAppShell({
                           body: alertMsg,
                           id: Math.floor(Math.random() * 1000000),
                           sound: 'default',
-                          channelId: 'default',
+                          channelId: 'default_v2',
                           smallIcon: 'ic_launcher',
                           largeIcon: 'ic_launcher',
                           extra: s
@@ -3082,7 +3082,7 @@ function MainAppShell({
               body: msg.text,
               id: Math.floor(Math.random() * 1000000),
               sound: 'default',
-              channelId: 'default',
+              channelId: 'default_v2',
               smallIcon: 'ic_launcher',
               largeIcon: 'ic_launcher',
               extra: msg
@@ -3133,7 +3133,7 @@ function MainAppShell({
               body: notif.message || "",
               id: Math.floor(Math.random() * 1000000),
               sound: 'default',
-              channelId: 'default',
+              channelId: 'default_v2',
               smallIcon: 'ic_launcher',
               largeIcon: 'ic_launcher',
               extra: notif

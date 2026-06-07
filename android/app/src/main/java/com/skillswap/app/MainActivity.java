@@ -15,7 +15,7 @@ public class MainActivity extends BridgeActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             // Default channel
             NotificationChannel defaultChannel = new NotificationChannel(
-                "default",
+                "default_v2",
                 "Default Channel",
                 NotificationManager.IMPORTANCE_HIGH
             );
@@ -26,7 +26,7 @@ public class MainActivity extends BridgeActivity {
             
             // Calls channel
             NotificationChannel callsChannel = new NotificationChannel(
-                "calls",
+                "calls_v2",
                 "Call Channel",
                 NotificationManager.IMPORTANCE_HIGH
             );
