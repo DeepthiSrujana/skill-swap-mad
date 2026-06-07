@@ -2393,6 +2393,7 @@ function MainAppShell({
   const localVideoElRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoElRef = useRef<HTMLVideoElement | null>(null);
   const iceCandidatesQueueRef = useRef<any[]>([]);
+  const callTimeoutRef = useRef<any>(null);
 
   // Swap video sources when enlarged state changes
   useEffect(() => {
@@ -2406,6 +2407,11 @@ function MainAppShell({
 
   const cleanupCall = () => {
     console.log("[WebRTC] Executing cleanupCall. Hanging up...");
+    
+    if (callTimeoutRef.current) {
+      clearTimeout(callTimeoutRef.current);
+      callTimeoutRef.current = null;
+    }
     
     // @ts-ignore
     const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
@@ -2803,6 +2809,10 @@ function MainAppShell({
 
     const handleCallAccepted = async (data: { peerId: string }) => {
       console.log("[Socket.io] Call accepted by peer:", data.peerId);
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current);
+        callTimeoutRef.current = null;
+      }
       setCallStatus('connected');
       setCallPeerId(data.peerId);
       setCallAlertMsg(`Call connected! 📞`);
@@ -2874,6 +2884,21 @@ function MainAppShell({
     setCallPeerPicture(partnerPicture || '');
     setCallAlertMsg(`Calling ${partnerName}... 📞`);
     setTimeout(() => setCallAlertMsg(null), 4000);
+
+    if (callTimeoutRef.current) {
+      clearTimeout(callTimeoutRef.current);
+    }
+
+    callTimeoutRef.current = setTimeout(() => {
+      console.log("[WebRTC] Call timeout reached. Cutting call...");
+      if (socket) {
+        socket.emit('call-end', { to: partnerId });
+      }
+      cleanupCall();
+      setCallAlertMsg("Not answering");
+      setTimeout(() => setCallAlertMsg(null), 5000);
+    }, 60000);
+
     socket.emit('call-user', { 
       to: partnerId, 
       callerName: activeUser?.name || 'A SkillSwapper', 
