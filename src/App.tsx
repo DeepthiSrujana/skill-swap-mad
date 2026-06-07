@@ -1206,36 +1206,19 @@ interface GooglePasswordModalProps {
   onClose: () => void;
   onSubmitDetails: (name: string, password: string) => void;
   isSubmitting: boolean;
-  isExistingUser?: boolean;
+  isExistingUser: boolean;
 }
 
-function GooglePasswordModal({ isOpen, email, initialName, onClose, onSubmitDetails, isSubmitting, isExistingUser: propIsExistingUser }: GooglePasswordModalProps) {
+function GooglePasswordModal({ isOpen, email, initialName, onClose, onSubmitDetails, isSubmitting, isExistingUser }: GooglePasswordModalProps) {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
-  const [isExistingUser, setIsExistingUser] = useState<boolean>(!!propIsExistingUser);
 
   useEffect(() => {
     if (isOpen) {
       setName(initialName || '');
       setPassword('');
-      
-      if (email) {
-        fetch(`${API_BASE}/auth/check-email?email=${encodeURIComponent(email.trim().toLowerCase())}`)
-          .then(res => res.json())
-          .then(data => {
-            setIsExistingUser(!!data.exists);
-          })
-          .catch(err => {
-            console.error("Error checking email in GooglePasswordModal:", err);
-            if (propIsExistingUser !== undefined) {
-              setIsExistingUser(propIsExistingUser);
-            }
-          });
-      } else if (propIsExistingUser !== undefined) {
-        setIsExistingUser(propIsExistingUser);
-      }
     }
-  }, [isOpen, email, initialName, propIsExistingUser]);
+  }, [isOpen, initialName]);
 
   if (!isOpen) return null;
 
