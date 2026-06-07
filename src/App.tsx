@@ -29,7 +29,8 @@ import {
   MicOff,
   VideoOff,
   Settings,
-  Search
+  Search,
+  AlertTriangle
 } from 'lucide-react';
 
 const localStorage = window.localStorage;
@@ -5655,6 +5656,7 @@ function ProfileScreenView({
   // AI Support Chat & Security Settings States
   const [showSecuritySettings, setShowSecuritySettings] = useState(false);
   const [showAiChat, setShowAiChat] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [aiChatMessages, setAiChatMessages] = useState<any[]>([
     { text: "Hello! I am your SkillSwap AI Support Assistant. How can I help you today?", isMe: false }
   ]);
@@ -5870,10 +5872,11 @@ function ProfileScreenView({
     }
   };
 
-  const handleDeleteAccount = async () => {
-    const confirmDelete = window.confirm("Are you absolutely sure you want to permanently delete your account? This action is irreversible.");
-    if (!confirmDelete) return;
-    
+  const handleDeleteAccountClick = () => {
+    setShowDeleteConfirm(true);
+  };
+
+  const executeDeleteAccount = async () => {
     const token = localStorage.getItem('skillswap_token');
     if (!token) return;
 
@@ -5885,6 +5888,7 @@ function ProfileScreenView({
         }
       });
       if (res.ok) {
+        setShowDeleteConfirm(false);
         setShowSettingsModal(false);
         onDeleteAccount();
       } else {
@@ -6964,7 +6968,7 @@ function ProfileScreenView({
                   icon={<X size={18} style={{ color: '#EF4444' }} />} 
                   title="Delete Account" 
                   isDanger={true} 
-                  onClick={handleDeleteAccount} 
+                  onClick={handleDeleteAccountClick} 
                 />
                 
                 <div style={{ height: '8px' }} />
@@ -6980,6 +6984,97 @@ function ProfileScreenView({
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {showDeleteConfirm && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundColor: 'rgba(9, 8, 14, 0.9)',
+          backdropFilter: 'blur(10px)',
+          zIndex: 100000,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: '24px',
+          animation: 'fade-in 0.25s ease'
+        }}>
+          <div style={{
+            backgroundColor: '#1c1930',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            borderRadius: '24px',
+            padding: '28px 24px',
+            width: '100%',
+            maxWidth: '320px',
+            boxShadow: '0 20px 40px rgba(0,0,0,0.6)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            textAlign: 'center',
+            gap: '16px'
+          }}>
+            <div style={{
+              width: '56px',
+              height: '56px',
+              borderRadius: '50%',
+              backgroundColor: 'rgba(239, 68, 68, 0.1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#EF4444',
+              marginBottom: '4px'
+            }}>
+              <AlertTriangle size={28} />
+            </div>
+            
+            <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#fff', margin: 0 }}>Delete Account?</h3>
+            
+            <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', lineHeight: '1.5', margin: 0 }}>
+              This will permanently delete your profile, swap sessions, messages, and assessment history. This action is irreversible.
+            </p>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', width: '100%', gap: '10px', marginTop: '8px' }}>
+              <button 
+                onClick={executeDeleteAccount}
+                style={{
+                  height: '44px',
+                  borderRadius: '12px',
+                  backgroundColor: '#EF4444',
+                  color: '#fff',
+                  border: 'none',
+                  fontSize: '13px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  boxShadow: '0 4px 12px rgba(239, 68, 68, 0.2)'
+                }}
+              >
+                Delete Permanently
+              </button>
+              
+              <button 
+                onClick={() => setShowDeleteConfirm(false)}
+                style={{
+                  height: '44px',
+                  borderRadius: '12px',
+                  backgroundColor: 'rgba(255,255,255,0.04)',
+                  color: 'rgba(255,255,255,0.7)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  width: '100%'
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

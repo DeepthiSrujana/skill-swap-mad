@@ -278,7 +278,7 @@ app.post('/api/auth/signup', (req, finalRes) => {
     swapsCount: '0',
     ratingValue: '0.0',
     communitiesCount: '0',
-    title: 'SkillSwap Explorer',
+    title: '',
     bio: 'Passionate about learning and sharing knowledge. Let\'s grow together!',
     about: 'I am a new Explorer on the SkillSwap platform! Let\'s swap some cool skills.',
     teaches: ['General / Academics'],
@@ -383,7 +383,7 @@ app.post('/api/auth/google', async (req, finalRes) => {
       swapsCount: '0',
       ratingValue: '0.0',
       communitiesCount: '0',
-      title: 'SkillSwap Explorer',
+      title: '',
       bio: 'Signed in with Google. Let\'s swap some cool skills!',
       about: 'I am a new Explorer on the SkillSwap platform! Let\'s swap some cool skills.',
       teaches: ['General / Academics'],
@@ -1046,24 +1046,50 @@ async function sendFcmNotification(targetUserId, title, body, dataPayload = {}) 
 
 // Dynamic Match Score calculation helper
 function calculateMatchScore(currentUser, targetUser) {
-  if (!currentUser) return "85%";
-  let matchPoints = 80;
+  if (!currentUser) return "50%";
   
-  const currentWants = currentUser.wants || [];
-  const targetTeaches = targetUser.teaches || [];
-  const teachOverlap = targetTeaches.some(skill => 
-    currentWants.some(want => want.toLowerCase().trim() === skill.toLowerCase().trim())
-  );
-  if (teachOverlap) matchPoints += 10;
-
-  const currentTeaches = currentUser.teaches || [];
-  const targetWants = targetUser.wants || [];
-  const wantOverlap = targetWants.some(skill => 
-    currentTeaches.some(teach => teach.toLowerCase().trim() === skill.toLowerCase().trim())
-  );
-  if (wantOverlap) matchPoints += 8;
-
-  const finalScore = Math.min(matchPoints, 99);
+  let score = 15; // Base score
+  
+  const currentWants = Array.isArray(currentUser.wants) ? currentUser.wants : [];
+  const targetTeaches = Array.isArray(targetUser.teaches) ? targetUser.teaches : [];
+  
+  // Count matches where target teaches what current user wants
+  let learnMatches = 0;
+  currentWants.forEach(want => {
+    if (targetTeaches.some(teach => teach.toLowerCase().trim() === want.toLowerCase().trim())) {
+      learnMatches++;
+    }
+  });
+  score += learnMatches * 35; // 35% for each matching learning skill
+  
+  const currentTeaches = Array.isArray(currentUser.teaches) ? currentUser.teaches : [];
+  const targetWants = Array.isArray(targetUser.wants) ? targetUser.wants : [];
+  
+  // Count matches where current user teaches what target wants
+  let teachMatches = 0;
+  currentTeaches.forEach(teach => {
+    if (targetWants.some(want => want.toLowerCase().trim() === teach.toLowerCase().trim())) {
+      teachMatches++;
+    }
+  });
+  score += teachMatches * 25; // 25% for each matching teaching skill
+  
+  // Minor points for shared availability or language
+  if (currentUser.availability && targetUser.availability) {
+    const currAvail = currentUser.availability.toLowerCase();
+    const targAvail = targetUser.availability.toLowerCase();
+    if (currAvail === targAvail || currAvail.includes('flexible') || targAvail.includes('flexible')) {
+      score += 10;
+    }
+  }
+  
+  if (currentUser.language && targetUser.language) {
+    if (currentUser.language.toLowerCase().trim() === targetUser.language.toLowerCase().trim()) {
+      score += 5;
+    }
+  }
+  
+  const finalScore = Math.min(Math.max(score, 10), 99);
   return `${finalScore}%`;
 }
 
