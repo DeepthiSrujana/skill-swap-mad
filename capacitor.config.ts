@@ -9,6 +9,10 @@ const config: CapacitorConfig = {
       scopes: ['profile', 'email'],
       serverClientId: '550830734952-ka3lfmnf8aaemhq05ik3gsekcm17heee.apps.googleusercontent.com',
       forceCodeForRefreshToken: true
+    },
+    LocalNotifications: {
+      smallIcon: "ic_launcher",
+      iconColor: "#8B5CF6"
     }
   }
 };

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { GoogleAuth } from '@codetrix-studio/capacitor-google-auth';
+import { LocalNotifications } from '@capacitor/local-notifications';
 import {
   Zap,
   Users,
@@ -663,6 +664,39 @@ export default function App() {
         }
 
         try {
+          console.log("[Local Notification] Checking native local notification permissions...");
+          LocalNotifications.checkPermissions().then(async (status) => {
+            if (status.display === 'prompt') {
+              console.log("[Local Notification] Prompting user for native local notification permissions...");
+              await LocalNotifications.requestPermissions();
+            }
+
+            // Create high importance channels to ensure notification sound works on Android 8.0+
+            await LocalNotifications.createChannel({
+              id: 'default',
+              name: 'Default Channel',
+              description: 'General notifications with sound',
+              importance: 5,
+              sound: 'default',
+              visibility: 1,
+              vibration: true
+            }).catch(err => console.error("Error creating channel 'default':", err));
+
+            await LocalNotifications.createChannel({
+              id: 'calls',
+              name: 'Call Channel',
+              description: 'Urgent incoming call notifications',
+              importance: 5,
+              sound: 'default',
+              visibility: 1,
+              vibration: true
+            }).catch(err => console.error("Error creating channel 'calls':", err));
+          });
+        } catch (localErr) {
+          console.error("[Local Notification] Setup failed:", localErr);
+        }
+
+        try {
           console.log("[Push Notification] Initializing native Capacitor PushNotifications plugin...");
           import('@capacitor/push-notifications').then(async ({ PushNotifications }) => {
             let permStatus = await PushNotifications.checkPermissions();
@@ -697,6 +731,21 @@ export default function App() {
 
             PushNotifications.addListener('pushNotificationReceived', (notification) => {
               console.log('[Push Notification] Foreground push received: ' + JSON.stringify(notification));
+              import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
+                LocalNotifications.schedule({
+                  notifications: [
+                    {
+                      title: notification.title || notification.data?.title || 'New Notification',
+                      body: notification.body || notification.data?.body || '',
+                      id: Math.floor(Math.random() * 100000),
+                      sound: 'default',
+                      channelId: 'default',
+                      smallIcon: 'ic_launcher',
+                      largeIcon: 'ic_launcher'
+                    }
+                  ]
+                });
+              }).catch(err => console.error("[Push Notification] Failed to trigger local notification for foreground push:", err));
             });
 
             PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
@@ -866,6 +915,28 @@ export default function App() {
   );
 }
 
+const triggerIncorrectPasswordNotification = () => {
+  // @ts-ignore
+  const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
+  if (isCapacitor) {
+    import('@capacitor/local-notifications').then(({ LocalNotifications }) => {
+      LocalNotifications.schedule({
+        notifications: [
+          {
+            title: `Incorrect Password! ❌`,
+            body: `The password you entered is incorrect. Please try again.`,
+            id: 111111,
+            sound: 'default',
+            channelId: 'default',
+            smallIcon: 'ic_launcher',
+            largeIcon: 'ic_launcher'
+          }
+        ]
+      }).catch(err => console.error("[Local Notification] Failed to schedule incorrect password notification:", err));
+    }).catch(err => console.error("[Local Notification] Failed to import LocalNotifications:", err));
+  }
+};
+
 // =========================================================================
 // 1️⃣ SPLASH SCREEN
 // =========================================================================
@@ -883,18 +954,18 @@ function SplashScreen() {
       animation: 'fade-in 0.8s ease'
     }}>
       <div style={{
-        padding: '24px',
-        backgroundColor: 'rgba(99, 102, 241, 0.1)',
+        padding: '20px',
+        backgroundColor: 'rgba(255, 255, 255, 0.03)',
         borderRadius: '50%',
-        border: '2px solid rgba(99, 102, 241, 0.25)',
+        border: '2px solid rgba(255, 255, 255, 0.08)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         marginBottom: '24px',
-        boxShadow: '0 0 30px rgba(99, 102, 241, 0.2)',
+        boxShadow: '0 0 30px rgba(99, 102, 241, 0.15)',
         animation: 'bounce-gentle 2.5s infinite ease-in-out'
       }}>
-        <RefreshCw size={72} className="rotate-icon" style={{ color: '#6366F1', animation: 'spin-slow 8s linear infinite' }} />
+        <img src="/logo.png" alt="SkillSwap Logo" style={{ width: '80px', height: '80px', objectFit: 'contain' }} />
       </div>
       <h1 style={{ fontSize: '38px', fontWeight: 900, letterSpacing: '1.5px', color: '#fff', marginBottom: '8px' }}>
         SkillSwap
@@ -937,13 +1008,14 @@ function OnboardingScreen({ onGetStarted, onLoginRoute }: { onGetStarted: () => 
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', textAlign: 'center' }}>
         <div style={{
-          backgroundColor: 'rgba(139, 92, 246, 0.12)',
+          backgroundColor: 'rgba(255, 255, 255, 0.03)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
           borderRadius: '24px',
           padding: '20px',
           marginBottom: '40px',
-          boxShadow: '0 0 25px rgba(139, 92, 246, 0.15)'
+          boxShadow: '0 0 25px rgba(0, 0, 0, 0.2)'
         }}>
-          <Zap size={64} style={{ color: '#8B5CF6' }} />
+          <img src="/logo.png" alt="SkillSwap Logo" style={{ width: '64px', height: '64px', objectFit: 'contain' }} />
         </div>
         
         <h2 style={{ fontSize: '28px', fontWeight: 900, lineHeight: 1.25, color: '#fff', marginBottom: '16px' }}>
@@ -1134,25 +1206,44 @@ interface GooglePasswordModalProps {
   onClose: () => void;
   onSubmitDetails: (name: string, password: string) => void;
   isSubmitting: boolean;
+  isExistingUser?: boolean;
 }
 
-function GooglePasswordModal({ isOpen, email, initialName, onClose, onSubmitDetails, isSubmitting }: GooglePasswordModalProps) {
+function GooglePasswordModal({ isOpen, email, initialName, onClose, onSubmitDetails, isSubmitting, isExistingUser: propIsExistingUser }: GooglePasswordModalProps) {
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
+  const [isExistingUser, setIsExistingUser] = useState<boolean>(!!propIsExistingUser);
 
   useEffect(() => {
     if (isOpen) {
       setName(initialName || '');
       setPassword('');
+      
+      if (email) {
+        fetch(`${API_BASE}/auth/check-email?email=${encodeURIComponent(email.trim().toLowerCase())}`)
+          .then(res => res.json())
+          .then(data => {
+            setIsExistingUser(!!data.exists);
+          })
+          .catch(err => {
+            console.error("Error checking email in GooglePasswordModal:", err);
+            if (propIsExistingUser !== undefined) {
+              setIsExistingUser(propIsExistingUser);
+            }
+          });
+      } else if (propIsExistingUser !== undefined) {
+        setIsExistingUser(propIsExistingUser);
+      }
     }
-  }, [isOpen, initialName]);
+  }, [isOpen, email, initialName, propIsExistingUser]);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || !password) return;
-    onSubmitDetails(name.trim(), password);
+    if (!isExistingUser && !name.trim()) return;
+    if (!password) return;
+    onSubmitDetails(isExistingUser ? (name.trim() || initialName || '') : name.trim(), password);
   };
 
   return (
@@ -1181,7 +1272,9 @@ function GooglePasswordModal({ isOpen, email, initialName, onClose, onSubmitDeta
         gap: '16px'
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#fff', margin: 0 }}>Create Google Account</h3>
+          <h3 style={{ fontSize: '18px', fontWeight: 800, color: '#fff', margin: 0 }}>
+            {isExistingUser ? 'Google Account Login' : 'Create Google Account'}
+          </h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}>
             <X size={20} />
           </button>
@@ -1208,26 +1301,28 @@ function GooglePasswordModal({ isOpen, email, initialName, onClose, onSubmitDeta
             />
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Full Name</label>
-            <input 
-              required
-              type="text" 
-              placeholder="e.g. Jahnavi"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              style={{
-                height: '40px',
-                backgroundColor: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.06)',
-                borderRadius: '10px',
-                color: '#fff',
-                padding: '0 12px',
-                fontSize: '13px',
-                outline: 'none'
-              }}
-            />
-          </div>
+          {!isExistingUser && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Full Name</label>
+              <input 
+                required
+                type="text" 
+                placeholder="e.g. Jahnavi"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                style={{
+                  height: '40px',
+                  backgroundColor: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  borderRadius: '10px',
+                  color: '#fff',
+                  padding: '0 12px',
+                  fontSize: '13px',
+                  outline: 'none'
+                }}
+              />
+            </div>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
             <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.4)', textTransform: 'uppercase', fontWeight: 700 }}>Enter Password</label>
@@ -1265,7 +1360,9 @@ function GooglePasswordModal({ isOpen, email, initialName, onClose, onSubmitDeta
               boxShadow: 'none'
             }}
           >
-            {isSubmitting ? 'Creating Account...' : 'Continue'}
+            {isSubmitting 
+              ? (isExistingUser ? 'Logging in...' : 'Creating account...') 
+              : (isExistingUser ? 'Log In' : 'Create Account')}
           </button>
         </form>
       </div>
@@ -1279,35 +1376,80 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
   const [password, setPassword] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'checking' | 'logging-in' | 'creating'>('idle');
+  const [isGoogleExistingUser, setIsGoogleExistingUser] = useState(false);
   const [isGoogleOpen, setIsGoogleOpen] = useState(false);
   const [selectedGoogleEmail, setSelectedGoogleEmail] = useState('');
   const [selectedGoogleName, setSelectedGoogleName] = useState('');
   const [selectedGoogleIdToken, setSelectedGoogleIdToken] = useState('');
   const [isGooglePasswordOpen, setIsGooglePasswordOpen] = useState(false);
+  const [isEmailExisting, setIsEmailExisting] = useState<boolean | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email || !password) return;
+    if ((!isEmailExisting && !name) || !email || !password) return;
 
     setErrorMsg('');
     setIsSubmitting(true);
+    setSubmitStatus('checking');
 
     try {
-      const res = await fetch(`${API_BASE}/auth/signup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        onSignUpComplete(data.token, data.user);
+      // Check if email exists
+      const checkRes = await fetch(`${API_BASE}/auth/check-email?email=${encodeURIComponent(email.trim().toLowerCase())}`);
+      const checkData = await checkRes.json();
+
+      if (checkData.exists) {
+        setIsEmailExisting(true);
+        // Email exists! We show "Logging in to your account..." and execute Sign In
+        setSubmitStatus('logging-in');
+        const signinRes = await fetch(`${API_BASE}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: email.trim().toLowerCase(), password })
+        });
+        const signinData = await signinRes.json();
+        if (signinRes.ok) {
+          onSignUpComplete(signinData.token, signinData.user);
+        } else {
+          setErrorMsg(signinData.error || 'Incorrect password for existing account.');
+          triggerIncorrectPasswordNotification();
+        }
       } else {
-        setErrorMsg(data.error || 'Signup failed.');
+        setIsEmailExisting(false);
+        // Email does not exist! We show "Creating account..." and execute Sign Up
+        setSubmitStatus('creating');
+        const signupRes = await fetch(`${API_BASE}/auth/signup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email: email.trim().toLowerCase(), password })
+        });
+        const signupData = await signupRes.json();
+        if (signupRes.ok) {
+          onSignUpComplete(signupData.token, signupData.user);
+        } else if (signupData.error === 'An account with this email already exists.') {
+          // Dynamic fallback: if account actually exists in backend, execute sign-in and show "Logging in..."
+          setSubmitStatus('logging-in');
+          const signinRes = await fetch(`${API_BASE}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email.trim().toLowerCase(), password })
+          });
+          const signinData = await signinRes.json();
+          if (signinRes.ok) {
+            onSignUpComplete(signinData.token, signinData.user);
+          } else {
+            setErrorMsg(signinData.error || 'Incorrect password for existing account.');
+            triggerIncorrectPasswordNotification();
+          }
+        } else {
+          setErrorMsg(signupData.error || 'Signup failed.');
+        }
       }
     } catch (err) {
       setErrorMsg('Failed to connect to backend server.');
     } finally {
       setIsSubmitting(false);
+      setSubmitStatus('idle');
     }
   };
 
@@ -1322,9 +1464,20 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
         console.log("[Google Auth] Received native user:", googleUser);
         
         if (googleUser && googleUser.idToken) {
-          setSelectedGoogleEmail(googleUser.email || '');
+          const gEmail = googleUser.email || '';
+          setSelectedGoogleEmail(gEmail);
           setSelectedGoogleName(googleUser.name || 'Google User');
           setSelectedGoogleIdToken(googleUser.idToken || '');
+          
+          try {
+            const checkRes = await fetch(`${API_BASE}/auth/check-email?email=${encodeURIComponent(gEmail.trim().toLowerCase())}`);
+            const checkData = await checkRes.json();
+            console.log("[Google Auth SignUp] Check email result:", checkData);
+            setIsGoogleExistingUser(!!checkData.exists);
+          } catch (e) {
+            console.error("[Google Auth SignUp] Check email failed:", e);
+            setIsGoogleExistingUser(false);
+          }
           setIsGooglePasswordOpen(true);
         } else {
           setErrorMsg('Failed to obtain Google login credentials.');
@@ -1345,6 +1498,17 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
     setSelectedGoogleEmail(gEmail);
     setSelectedGoogleName(gName);
     setSelectedGoogleIdToken('');
+    
+    try {
+      const checkRes = await fetch(`${API_BASE}/auth/check-email?email=${encodeURIComponent(gEmail.trim().toLowerCase())}`);
+      const checkData = await checkRes.json();
+      console.log("[Google Auth SignUp Select] Check email result:", checkData);
+      setIsGoogleExistingUser(!!checkData.exists);
+    } catch (e) {
+      console.error("[Google Auth SignUp Select] Check email failed:", e);
+      setIsGoogleExistingUser(false);
+    }
+    
     setIsGooglePasswordOpen(true);
   };
 
@@ -1368,6 +1532,9 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
         onSignUpComplete(data.token, data.user);
       } else {
         setErrorMsg(data.error || 'Google login failed.');
+        if (data.error === 'Incorrect password for this account.') {
+          triggerIncorrectPasswordNotification();
+        }
       }
     } catch (err) {
       setErrorMsg('Failed to connect to backend server.');
@@ -1395,6 +1562,7 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
         onClose={() => setIsGooglePasswordOpen(false)} 
         onSubmitDetails={handleGoogleSubmitWithPassword} 
         isSubmitting={isSubmitting} 
+        isExistingUser={isGoogleExistingUser}
       />
 
       <h2 style={{ fontSize: '28px', fontWeight: 900, color: '#fff', textAlign: 'center', marginBottom: '8px' }}>
@@ -1425,27 +1593,29 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
       )}
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div>
-          <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.5px' }}>Full Name</label>
-          <input
-            required
-            type="text"
-            placeholder="John Doe"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            style={{
-              width: '100%',
-              height: '48px',
-              backgroundColor: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(255,255,255,0.06)',
-              borderRadius: '12px',
-              padding: '0 16px',
-              color: '#fff',
-              fontSize: '14px',
-              outline: 'none'
-            }}
-          />
-        </div>
+        {!isEmailExisting && (
+          <div>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.5px' }}>Full Name</label>
+            <input
+              required={!isEmailExisting}
+              type="text"
+              placeholder="John Doe"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              style={{
+                width: '100%',
+                height: '48px',
+                backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                borderRadius: '12px',
+                padding: '0 16px',
+                color: '#fff',
+                fontSize: '14px',
+                outline: 'none'
+              }}
+            />
+          </div>
+        )}
 
         <div>
           <label style={{ display: 'block', fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', marginBottom: '6px', letterSpacing: '0.5px' }}>Email Address</label>
@@ -1454,7 +1624,21 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
             type="email"
             placeholder="john@example.com"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setIsEmailExisting(null);
+            }}
+            onBlur={async () => {
+              if (email.trim().includes('@')) {
+                try {
+                  const checkRes = await fetch(`${API_BASE}/auth/check-email?email=${encodeURIComponent(email.trim().toLowerCase())}`);
+                  const checkData = await checkRes.json();
+                  setIsEmailExisting(!!checkData.exists);
+                } catch (e) {
+                  console.error("Error checking email:", e);
+                }
+              }
+            }}
             style={{
               width: '100%',
               height: '48px',
@@ -1492,7 +1676,13 @@ function SignUpScreen({ onSignUpComplete, onLoginRoute }: { onSignUpComplete: (t
         </div>
 
         <button type="submit" disabled={isSubmitting} className="btn-primary" style={{ marginTop: '12px', width: '100%', opacity: isSubmitting ? 0.7 : 1 }}>
-          {isSubmitting ? 'Registering account...' : 'Sign Up'}
+          {isSubmitting ? (
+            submitStatus === 'checking' ? 'Checking email...' :
+            submitStatus === 'creating' ? 'Creating account...' :
+            'Logging in...'
+          ) : (
+            isEmailExisting ? 'Log In' : 'Sign Up'
+          )}
         </button>
       </form>
 
@@ -1554,6 +1744,7 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
   const [selectedGoogleName, setSelectedGoogleName] = useState('');
   const [selectedGoogleIdToken, setSelectedGoogleIdToken] = useState('');
   const [isGooglePasswordOpen, setIsGooglePasswordOpen] = useState(false);
+  const [isGoogleExistingUser, setIsGoogleExistingUser] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1573,6 +1764,17 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
         onSignInComplete(data.token, data.user);
       } else {
         setErrorMsg(data.error || 'Authentication failed.');
+        try {
+          const checkRes = await fetch(`${API_BASE}/auth/check-email?email=${encodeURIComponent(email.trim().toLowerCase())}`);
+          const checkData = await checkRes.json();
+          if (checkData.exists) {
+            triggerIncorrectPasswordNotification();
+          }
+        } catch (e) {
+          if (data.error === 'Invalid email or password.' || data.error === 'Incorrect password for this account.') {
+            triggerIncorrectPasswordNotification();
+          }
+        }
       }
     } catch (err) {
       setErrorMsg('Failed to connect to backend server.');
@@ -1592,9 +1794,20 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
         console.log("[Google Auth] Received native user:", googleUser);
         
         if (googleUser && googleUser.idToken) {
-          setSelectedGoogleEmail(googleUser.email || '');
+          const gEmail = googleUser.email || '';
+          setSelectedGoogleEmail(gEmail);
           setSelectedGoogleName(googleUser.name || 'Google User');
           setSelectedGoogleIdToken(googleUser.idToken || '');
+          
+          try {
+            const checkRes = await fetch(`${API_BASE}/auth/check-email?email=${encodeURIComponent(gEmail.trim().toLowerCase())}`);
+            const checkData = await checkRes.json();
+            console.log("[Google Auth SignIn] Check email result:", checkData);
+            setIsGoogleExistingUser(!!checkData.exists);
+          } catch (e) {
+            console.error("[Google Auth SignIn] Check email failed:", e);
+            setIsGoogleExistingUser(false);
+          }
           setIsGooglePasswordOpen(true);
         } else {
           setErrorMsg('Failed to obtain Google login credentials.');
@@ -1615,6 +1828,17 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
     setSelectedGoogleEmail(gEmail);
     setSelectedGoogleName(gName);
     setSelectedGoogleIdToken('');
+    
+    try {
+      const checkRes = await fetch(`${API_BASE}/auth/check-email?email=${encodeURIComponent(gEmail.trim().toLowerCase())}`);
+      const checkData = await checkRes.json();
+      console.log("[Google Auth SignIn Select] Check email result:", checkData);
+      setIsGoogleExistingUser(!!checkData.exists);
+    } catch (e) {
+      console.error("[Google Auth SignIn Select] Check email failed:", e);
+      setIsGoogleExistingUser(false);
+    }
+    
     setIsGooglePasswordOpen(true);
   };
 
@@ -1638,6 +1862,9 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
         onSignInComplete(data.token, data.user);
       } else {
         setErrorMsg(data.error || 'Google login failed.');
+        if (data.error === 'Incorrect password for this account.') {
+          triggerIncorrectPasswordNotification();
+        }
       }
     } catch (err) {
       setErrorMsg('Failed to connect to backend server.');
@@ -1665,6 +1892,7 @@ function SignInScreen({ onSignInComplete, onSignUpRoute }: { onSignInComplete: (
         onClose={() => setIsGooglePasswordOpen(false)} 
         onSubmitDetails={handleGoogleSubmitWithPassword} 
         isSubmitting={isSubmitting} 
+        isExistingUser={isGoogleExistingUser}
       />
 
       <h2 style={{ fontSize: '28px', fontWeight: 900, color: '#fff', textAlign: 'center', marginBottom: '8px' }}>
@@ -2194,6 +2422,13 @@ function MainAppShell({
 
   const cleanupCall = () => {
     console.log("[WebRTC] Executing cleanupCall. Hanging up...");
+    
+    // @ts-ignore
+    const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
+    if (isCapacitor) {
+      LocalNotifications.cancel({ notifications: [{ id: 999999 }] }).catch(() => {});
+    }
+
     setCallStatus('idle');
     setCallPeerId('');
     setCallPeerName('');
@@ -2544,17 +2779,36 @@ function MainAppShell({
       setCallPeerName(data.callerName);
       setCallPeerPicture(data.callerPicture || '');
 
-      setCallAlertMsg(`Incoming call from ${data.callerName} 📞`);
-      setTimeout(() => setCallAlertMsg(null), 4000);
+      // @ts-ignore
+      const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
+      if (isCapacitor) {
+        LocalNotifications.schedule({
+          notifications: [
+            {
+              title: `Incoming Video Call! 📞`,
+              body: `${data.callerName} is calling you on SkillSwap. Tap to accept!`,
+              id: 999999,
+              sound: 'default',
+              channelId: 'calls',
+              smallIcon: 'ic_launcher',
+              largeIcon: 'ic_launcher',
+              extra: data
+            }
+          ]
+        }).catch(err => console.error("[Local Notification] Failed to schedule incoming call:", err));
+      } else {
+        setCallAlertMsg(`Incoming call from ${data.callerName} 📞`);
+        setTimeout(() => setCallAlertMsg(null), 4000);
 
-      // Trigger native browser notification
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(`Incoming Video Call! 📞`, {
-          body: `${data.callerName} is calling you on SkillSwap. Tap to accept!`,
-          icon: '/favicon.ico',
-          tag: 'incoming-call',
-          requireInteraction: true
-        });
+        // Trigger native browser notification
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(`Incoming Video Call! 📞`, {
+            body: `${data.callerName} is calling you on SkillSwap. Tap to accept!`,
+            icon: '/favicon.ico',
+            tag: 'incoming-call',
+            requireInteraction: true
+          });
+        }
       }
     };
 
@@ -2769,15 +3023,38 @@ function MainAppShell({
                 if (diffMins > -5 && diffMins <= 10 && !notifiedSessionsRef.current.has(s.id)) {
                   notifiedSessionsRef.current.add(s.id);
                   
-                  if ('Notification' in window && Notification.permission === 'granted') {
+                  // @ts-ignore
+                  const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
+                  if (isCapacitor) {
                     let alertMsg = `Your session "${s.title}" is starting soon at ${s.date}!`;
                     if (diffMins <= 0) {
                       alertMsg = `Your session "${s.title}" is starting now!`;
                     }
-                    new Notification("Session Alert! 📅", {
-                      body: alertMsg,
-                      icon: '/favicon.ico'
-                    });
+                    LocalNotifications.schedule({
+                      notifications: [
+                        {
+                          title: "Session Alert! 📅",
+                          body: alertMsg,
+                          id: Math.floor(Math.random() * 1000000),
+                          sound: 'default',
+                          channelId: 'default',
+                          smallIcon: 'ic_launcher',
+                          largeIcon: 'ic_launcher',
+                          extra: s
+                        }
+                      ]
+                    }).catch(err => console.error("[Local Notification] Failed to schedule session alarm:", err));
+                  } else {
+                    if ('Notification' in window && Notification.permission === 'granted') {
+                      let alertMsg = `Your session "${s.title}" is starting soon at ${s.date}!`;
+                      if (diffMins <= 0) {
+                        alertMsg = `Your session "${s.title}" is starting now!`;
+                      }
+                      new Notification("Session Alert! 📅", {
+                        body: alertMsg,
+                        icon: '/favicon.ico'
+                      });
+                    }
                   }
                 }
               }
@@ -2812,17 +3089,36 @@ function MainAppShell({
       
       const isGroup = COMMUNITY_CIRCLES.includes(msg.receiverId);
 
-      if ('Notification' in window && Notification.permission === 'granted') {
-        if (isGroup) {
-          new Notification(`Group: ${msg.receiverId} 👥`, {
-            body: `${msg.senderName || 'Someone'}: ${msg.text}`,
-            icon: '/favicon.ico'
-          });
-        } else {
-          new Notification(`Message from ${msg.senderName || 'Someone'} 💬`, {
-            body: msg.text,
-            icon: '/favicon.ico'
-          });
+      // @ts-ignore
+      const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
+      if (isCapacitor) {
+        LocalNotifications.schedule({
+          notifications: [
+            {
+              title: isGroup ? `Group: ${msg.receiverId} 👥` : `Message from ${msg.senderName || 'Someone'} 💬`,
+              body: msg.text,
+              id: Math.floor(Math.random() * 1000000),
+              sound: 'default',
+              channelId: 'default',
+              smallIcon: 'ic_launcher',
+              largeIcon: 'ic_launcher',
+              extra: msg
+            }
+          ]
+        }).catch(err => console.error("[Local Notification] Failed to schedule chat message:", err));
+      } else {
+        if ('Notification' in window && Notification.permission === 'granted') {
+          if (isGroup) {
+            new Notification(`Group: ${msg.receiverId} 👥`, {
+              body: `${msg.senderName || 'Someone'}: ${msg.text}`,
+              icon: '/favicon.ico'
+            });
+          } else {
+            new Notification(`Message from ${msg.senderName || 'Someone'} 💬`, {
+              body: msg.text,
+              icon: '/favicon.ico'
+            });
+          }
         }
       }
     };
@@ -2844,16 +3140,35 @@ function MainAppShell({
         return [notif, ...prev];
       });
 
-      // Display global in-app floating pop-up/alert toast
-      setCallAlertMsg(`${notif.title || 'Notification!'} ${notif.message || ''}`);
-      setTimeout(() => setCallAlertMsg(null), 5000);
+      // @ts-ignore
+      const isCapacitor = typeof window !== 'undefined' && (window.Capacitor || (window.parent && window.parent.Capacitor));
+      if (isCapacitor) {
+        LocalNotifications.schedule({
+          notifications: [
+            {
+              title: notif.title || "New Notification! 🚀",
+              body: notif.message || "",
+              id: Math.floor(Math.random() * 1000000),
+              sound: 'default',
+              channelId: 'default',
+              smallIcon: 'ic_launcher',
+              largeIcon: 'ic_launcher',
+              extra: notif
+            }
+          ]
+        }).catch(err => console.error("[Local Notification] Failed to schedule notification:", err));
+      } else {
+        // Display global in-app floating pop-up/alert toast
+        setCallAlertMsg(`${notif.title || 'Notification!'} ${notif.message || ''}`);
+        setTimeout(() => setCallAlertMsg(null), 5000);
 
-      // Show native system browser notification
-      if ('Notification' in window && Notification.permission === 'granted') {
-        new Notification(notif.title || "New Notification! 🚀", {
-          body: notif.message || "",
-          icon: '/favicon.ico'
-        });
+        // Show native system browser notification
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification(notif.title || "New Notification! 🚀", {
+            body: notif.message || "",
+            icon: '/favicon.ico'
+          });
+        }
       }
     };
 

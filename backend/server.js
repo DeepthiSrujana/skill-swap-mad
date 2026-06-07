@@ -215,9 +215,40 @@ function writeDatabase(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf8');
 }
 
+// Clean up Hello accounts on server startup
+try {
+  const db = readDatabase();
+  const helloUserIds = db.users
+    .filter(u => u.name && u.name.trim().toLowerCase().startsWith('hello'))
+    .map(u => u.id);
+
+  if (helloUserIds.length > 0) {
+    console.log(`[Startup Cleanup] Found ${helloUserIds.length} Hello profiles. Removing them...`);
+    db.users = db.users.filter(u => !helloUserIds.includes(u.id));
+    if (db.notifications) {
+      db.notifications = db.notifications.filter(n => !helloUserIds.includes(n.userId));
+    }
+    writeDatabase(db);
+    console.log(`[Startup Cleanup] Successfully removed Hello profiles from database.`);
+  }
+} catch (cleanupErr) {
+  console.error("[Startup Cleanup] Error cleaning database on startup:", cleanupErr);
+}
+
 // =========================================================================
 // 🔐 AUTHENTICATION ENDPOINTS
 // =========================================================================
+
+// Check Email Existence Endpoint
+app.get('/api/auth/check-email', (req, finalRes) => {
+  const { email } = req.query;
+  if (!email) {
+    return finalRes.status(400).json({ error: 'Email parameter is required.' });
+  }
+  const db = readDatabase();
+  const exists = db.users.some(u => u.email.toLowerCase() === email.toLowerCase());
+  return finalRes.json({ exists });
+});
 
 // Sign Up Endpoint
 app.post('/api/auth/signup', (req, finalRes) => {
@@ -982,7 +1013,8 @@ async function sendFcmNotification(targetUserId, title, body, dataPayload = {}) 
           title: title,
           body: body,
           sound: 'default',
-          badge: '1'
+          badge: '1',
+          icon: 'ic_launcher'
         },
         data: {
           click_action: 'FLUTTER_NOTIFICATION_CLICK',
@@ -1059,8 +1091,11 @@ app.get('/api/users/discover', authenticateToken, (req, finalRes) => {
   const userId = req.user.id;
   const currentUser = db.users.find(u => u.id === userId);
 
-  // Filter out the requesting user
-  const otherUsers = db.users.filter(u => String(u.id) !== String(userId));
+  // Filter out the requesting user and any user whose name starts with "hello"
+  const otherUsers = db.users.filter(u => 
+    String(u.id) !== String(userId) && 
+    !(u.name && u.name.trim().toLowerCase().startsWith('hello'))
+  );
 
   const mappedSwappers = otherUsers.map(u => {
     // Generate initials avatar
@@ -1495,6 +1530,38 @@ app.put('/api/sessions/:id', authenticateToken, (req, finalRes) => {
     if (otherSession) {
       sendFcmNotification(otherSession.userId, "Swap Accepted! 🎉", `${accepterName} accepted your skill swap request!`, {
         type: 'session_accepted',
+        groupId: groupId,
+        partnerId: userId
+      });
+    }
+  }
+
+  // If session is completed/ended, handle triggers
+  if (status === 'completed' && oldStatus !== 'completed') {
+    relatedSessions.forEach(s => {
+      const partnerUser = db.users.find(u => u.id === s.partnerId);
+      const completeNotif = {
+        id: "notif_complete_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5),
+        userId: s.userId,
+        title: "Session Completed! 🎉",
+        message: s.userId === userId
+          ? `You completed the session "${s.title}" with ${s.partnerName}. Please rate your swapper!`
+          : `Your session "${s.title}" with ${db.users.find(u => u.id === userId)?.name || 'your partner'} has been completed. Please rate your swapper!`,
+        type: "session",
+        timestamp: Date.now(),
+        read: false,
+        senderPicture: partnerUser ? partnerUser.profilePicture : undefined
+      };
+      if (!db.notifications) db.notifications = [];
+      db.notifications.push(completeNotif);
+      io.to(s.userId).emit('notification', completeNotif);
+    });
+
+    const otherSession = relatedSessions.find(s => s.userId !== userId);
+    const completedByName = db.users.find(u => u.id === userId)?.name || 'Your partner';
+    if (otherSession) {
+      sendFcmNotification(otherSession.userId, "Session Completed! 🎉", `${completedByName} marked your session as completed.`, {
+        type: 'session_completed',
         groupId: groupId,
         partnerId: userId
       });
