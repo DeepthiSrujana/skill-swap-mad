@@ -2367,8 +2367,13 @@ function MainAppShell({
   const [micMuted, setMicMuted] = useState(false);
   const [videoDisabled, setVideoDisabled] = useState(false);
   const [isUsingVirtualStream, setIsUsingVirtualStream] = useState(false);
-  const [isLocalEnlarged, setIsLocalEnlarged] = useState(false);
   const [callAlertMsg, setCallAlertMsg] = useState<string | null>(null);
+  const [callIsAudioOnly, setCallIsAudioOnly] = useState(false);
+  const [isLocalEnlarged, setIsLocalEnlarged] = useState(false);
+  const callIsAudioOnlyRef = useRef(false);
+  useEffect(() => {
+    callIsAudioOnlyRef.current = callIsAudioOnly;
+  }, [callIsAudioOnly]);
 
   // Sync refs to avoid stale closure bugs in Socket.io event listeners
   const callStatusRef = useRef(callStatus);
@@ -2423,6 +2428,7 @@ function MainAppShell({
     setCallPeerId('');
     setCallPeerName('');
     setCallPeerPicture('');
+    setCallIsAudioOnly(false);
     setMicMuted(false);
     setVideoDisabled(false);
     setIsUsingVirtualStream(false);
@@ -2568,7 +2574,26 @@ function MainAppShell({
     return new MediaStream(tracks);
   };
 
-  const getUserMediaWithFallback = async (currentFacingMode: 'user' | 'environment'): Promise<{ stream: MediaStream; isVirtual: boolean }> => {
+  const getUserMediaWithFallback = async (currentFacingMode: 'user' | 'environment', isAudioOnly: boolean = false): Promise<{ stream: MediaStream; isVirtual: boolean }> => {
+    if (isAudioOnly) {
+      try {
+        console.log(`[WebRTC] Audio-only call: requesting microphone...`);
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: false,
+          audio: true
+        });
+        return { stream, isVirtual: false };
+      } catch (err) {
+        console.warn("[WebRTC] Audio-only call: mic request failed, returning silent audio track:", err);
+        const silentAudio = getSilentAudioTrack();
+        const stream = new MediaStream();
+        if (silentAudio) {
+          stream.addTrack(silentAudio);
+        }
+        return { stream, isVirtual: true };
+      }
+    }
+
     // 1. Try camera and microphone
     try {
       console.log(`[WebRTC] Fallback Chain - Stage 1: Requesting camera (${currentFacingMode}) + mic...`);
@@ -2619,8 +2644,8 @@ function MainAppShell({
     return { stream: getVirtualCanvasStream(), isVirtual: true };
   };
 
-  const getMediaStream = async (): Promise<MediaStream> => {
-    const { stream } = await getUserMediaWithFallback(facingModeRef.current);
+  const getMediaStream = async (isAudioOnly: boolean = false): Promise<MediaStream> => {
+    const { stream } = await getUserMediaWithFallback(facingModeRef.current, isAudioOnly);
     return stream;
   };
 
@@ -2671,9 +2696,9 @@ function MainAppShell({
   const setupWebRTCPeer = async (isInitiator: boolean, offerData?: any, peerIdOverride?: string) => {
     const targetPeerId = peerIdOverride || callPeerIdRef.current;
 
-    console.log(`[WebRTC] Setting up peer. Initiator: ${isInitiator}, Peer: ${targetPeerId}`);
+    console.log(`[WebRTC] Setting up peer. Initiator: ${isInitiator}, Peer: ${targetPeerId}, Audio-only: ${callIsAudioOnlyRef.current}`);
 
-    const localStream = await getMediaStream();
+    const localStream = await getMediaStream(callIsAudioOnlyRef.current);
     localStreamRef.current = localStream;
     
     setTimeout(() => {
@@ -2758,15 +2783,15 @@ function MainAppShell({
   useEffect(() => {
     if (!socket) return;
 
-    const handleIncomingCall = (data: { from: string; callerName: string; callerPicture?: string }) => {
-      console.log("[Socket.io] Incoming call from:", data.callerName, "Current status:", callStatusRef.current);
+    const handleIncomingCall = (data: { from: string; callerName: string; callerPicture?: string; isAudioOnly?: boolean }) => {
+      console.log("[Socket.io] Incoming call from:", data.callerName, "Current status:", callStatusRef.current, "Audio-only:", data.isAudioOnly);
       if (callStatusRef.current !== 'idle') {
         socket.emit('call-decline', { to: data.from });
         return;
       }
+      setCallIsAudioOnly(!!data.isAudioOnly);
       setCallStatus('incoming');
       setCallPeerId(data.from);
-      setCallPeerName(data.callerName);
       setCallPeerPicture(data.callerPicture || '');
 
       // @ts-ignore
@@ -2775,7 +2800,7 @@ function MainAppShell({
         LocalNotifications.schedule({
           notifications: [
             {
-              title: `Incoming Video Call! 📞`,
+              title: data.isAudioOnly ? `Incoming Audio Call! 📞` : `Incoming Video Call! 📞`,
               body: `${data.callerName} is calling you on SkillSwap. Tap to accept!`,
               id: 999999,
               sound: 'default',
@@ -2787,12 +2812,12 @@ function MainAppShell({
           ]
         }).catch(err => console.error("[Local Notification] Failed to schedule incoming call:", err));
       } else {
-        setCallAlertMsg(`Incoming call from ${data.callerName} 📞`);
+        setCallAlertMsg(data.isAudioOnly ? `Incoming audio call from ${data.callerName} 📞` : `Incoming call from ${data.callerName} 📞`);
         setTimeout(() => setCallAlertMsg(null), 4000);
 
         // Trigger native browser notification
         if ('Notification' in window && Notification.permission === 'granted') {
-          new Notification(`Incoming Video Call! 📞`, {
+          new Notification(data.isAudioOnly ? `Incoming Audio Call! 📞` : `Incoming Video Call! 📞`, {
             body: `${data.callerName} is calling you on SkillSwap. Tap to accept!`,
             icon: '/favicon.ico',
             tag: 'incoming-call',
@@ -2820,8 +2845,9 @@ function MainAppShell({
       await setupWebRTCPeer(true, undefined, data.peerId);
     };
 
-    const handleWebRTCOffer = async (data: { offer: any; from: string }) => {
+    const handleWebRTCOffer = async (data: { offer: any; from: string; isAudioOnly?: boolean }) => {
       console.log("[Socket.io] WebRTC offer received from:", data.from);
+      setCallIsAudioOnly(!!data.isAudioOnly);
       setCallPeerId(data.from);
       await setupWebRTCPeer(false, data.offer, data.from);
     };
@@ -2876,13 +2902,14 @@ function MainAppShell({
     };
   }, [socket]);
 
-  const handleInitiateCall = (partnerId: string, partnerName: string, partnerPicture?: string) => {
+  const handleInitiateCall = (partnerId: string, partnerName: string, partnerPicture?: string, isAudioOnly: boolean = false) => {
     if (!socket) return;
+    setCallIsAudioOnly(isAudioOnly);
     setCallStatus('outgoing');
     setCallPeerId(partnerId);
     setCallPeerName(partnerName);
     setCallPeerPicture(partnerPicture || '');
-    setCallAlertMsg(`Calling ${partnerName}... 📞`);
+    setCallAlertMsg(isAudioOnly ? `Calling ${partnerName} (Audio)... 📞` : `Calling ${partnerName}... 📞`);
     setTimeout(() => setCallAlertMsg(null), 4000);
 
     if (callTimeoutRef.current) {
@@ -2902,7 +2929,8 @@ function MainAppShell({
     socket.emit('call-user', { 
       to: partnerId, 
       callerName: activeUser?.name || 'A SkillSwapper', 
-      callerPicture: activeUser?.profilePicture || activeUser?.profileImage || activeUser?.avatarUrl || '' 
+      callerPicture: activeUser?.profilePicture || activeUser?.profileImage || activeUser?.avatarUrl || '',
+      isAudioOnly: isAudioOnly
     });
   };
 
@@ -3578,7 +3606,7 @@ function MainAppShell({
                 <>
                   <h3 style={{ fontSize: '26px', fontWeight: 900, margin: 0, color: '#fff' }}>{callPeerName}</h3>
                   <p style={{ color: '#6366F1', fontSize: '13px', fontWeight: 700, marginTop: '8px', letterSpacing: '2px', animation: 'pulse 1.5s infinite' }}>
-                    CALLING...
+                    {callIsAudioOnly ? 'OUTGOING AUDIO CALL...' : 'CALLING...'}
                   </p>
                 </>
               )}
@@ -3586,7 +3614,7 @@ function MainAppShell({
                 <>
                   <h3 style={{ fontSize: '26px', fontWeight: 900, margin: 0, color: '#fff' }}>{callPeerName}</h3>
                   <p style={{ color: '#10B981', fontSize: '13px', fontWeight: 700, marginTop: '8px', letterSpacing: '2px', animation: 'pulse 1.5s infinite' }}>
-                    INCOMING CALL...
+                    {callIsAudioOnly ? 'INCOMING AUDIO CALL...' : 'INCOMING CALL...'}
                   </p>
                 </>
               )}
@@ -3609,8 +3637,48 @@ function MainAppShell({
               alignItems: 'center',
               justifyContent: 'center'
             }}>
-              {/* Main Enlarged Video Frame */}
-              <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+              {callIsAudioOnly ? (
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: '20px',
+                  padding: '40px 20px',
+                  textAlign: 'center'
+                }}>
+                  <div style={{
+                    width: '120px',
+                    height: '120px',
+                    borderRadius: '50%',
+                    backgroundColor: getAvatarColor(callPeerId || 'default'),
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '44px',
+                    color: 'white',
+                    fontWeight: 900,
+                    border: '3px solid #6366F1',
+                    boxShadow: '0 0 40px rgba(99, 102, 241, 0.4)',
+                    overflow: 'hidden',
+                    position: 'relative'
+                  }}>
+                    {callPeerPicture ? (
+                      <img src={callPeerPicture} alt={callPeerName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    ) : (
+                      callPeerName.substring(0, 1).toUpperCase()
+                    )}
+                  </div>
+                  
+                  <div>
+                    <h3 style={{ fontSize: '22px', fontWeight: 900, color: '#fff', margin: 0 }}>{callPeerName}</h3>
+                    <p style={{ fontSize: '13px', color: '#6366F1', fontWeight: 700, marginTop: '8px', letterSpacing: '1px' }}>
+                      ONGOING AUDIO CALL...
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                /* Main Enlarged Video Frame */
+                <div style={{ width: '100%', height: '100%', position: 'relative' }}>
                 {isLocalEnlarged ? (
                   // Local user is enlarged
                   videoDisabled ? (
@@ -3680,7 +3748,6 @@ function MainAppShell({
                     {isLocalEnlarged ? 'YOU (PREVIEW)' : 'LIVE'}
                   </span>
                 </div>
-              </div>
 
               {/* Small PIP (Picture in Picture) Frame */}
               <div 
@@ -3752,6 +3819,8 @@ function MainAppShell({
                   )
                 )}
               </div>
+            </div>
+            )}
             </div>
           )}
 
@@ -4711,7 +4780,7 @@ function ChatScreenView({
   socket: Socket | null; 
   activeUserId: string; 
   activeUser: any;
-  onInitiateCall: (partnerId: string, partnerName: string, partnerPicture?: string) => void; 
+  onInitiateCall: (partnerId: string, partnerName: string, partnerPicture?: string, isAudioOnly?: boolean) => void; 
   onOpenCommunity: () => void;
 }) {
   const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
@@ -5122,12 +5191,22 @@ function ChatScreenView({
         
         {/* Launch Video button call */}
         {!activePartner.isGroup && (
-          <button 
-            onClick={() => onInitiateCall(activePartnerId || '', activePartner.partnerName, activePartner.partnerPicture || activePartner.partnerImage)}
-            style={{ background: 'none', border: 'none', color: '#6366F1', cursor: 'pointer' }}
-          >
-            <Video size={20} />
-          </button>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <button 
+              onClick={() => onInitiateCall(activePartnerId || '', activePartner.partnerName, activePartner.partnerPicture || activePartner.partnerImage, true)}
+              style={{ background: 'none', border: 'none', color: '#6366F1', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+              title="Audio Call"
+            >
+              <Phone size={20} />
+            </button>
+            <button 
+              onClick={() => onInitiateCall(activePartnerId || '', activePartner.partnerName, activePartner.partnerPicture || activePartner.partnerImage, false)}
+              style={{ background: 'none', border: 'none', color: '#6366F1', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+              title="Video Call"
+            >
+              <Video size={20} />
+            </button>
+          </div>
         )}
       </div>
 
@@ -8128,7 +8207,7 @@ function ActiveSessionRoom({
 }: { 
   session: any; 
   onLeave: () => void; 
-  onInitiateCall: (partnerId: string, partnerName: string, partnerPicture?: string) => void;
+  onInitiateCall: (partnerId: string, partnerName: string, partnerPicture?: string, isAudioOnly?: boolean) => void;
   socket: Socket | null;
   activeUserId: string;
   onCompleteSession: (ratingTarget: { userId: string; userName: string }) => void;
@@ -8253,22 +8332,45 @@ function ActiveSessionRoom({
           <span style={{ fontSize: '14px', fontWeight: 800, color: '#fff' }}>Audio & Video call</span>
           <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>Initiate WebRTC calling in real-time</span>
         </div>
-        <button 
-          onClick={() => onInitiateCall(session.partnerId, session.partnerName, session.partnerPicture)}
-          style={{
-            backgroundColor: '#10B981',
-            color: '#000',
-            border: 'none',
-            borderRadius: '12px',
-            padding: '8px 16px',
-            fontSize: '12px',
-            fontWeight: 800,
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
-          }}
-        >
-          📞 Start Call
-        </button>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button 
+            onClick={() => onInitiateCall(session.partnerId, session.partnerName, session.partnerPicture, true)}
+            style={{
+              backgroundColor: 'rgba(99, 102, 241, 0.1)',
+              color: '#6366F1',
+              border: '1px solid rgba(99, 102, 241, 0.25)',
+              borderRadius: '12px',
+              padding: '8px 14px',
+              fontSize: '12px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px'
+            }}
+          >
+            <Phone size={14} /> Audio Call
+          </button>
+          <button 
+            onClick={() => onInitiateCall(session.partnerId, session.partnerName, session.partnerPicture, false)}
+            style={{
+              backgroundColor: '#10B981',
+              color: '#000',
+              border: 'none',
+              borderRadius: '12px',
+              padding: '8px 14px',
+              fontSize: '12px',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)'
+            }}
+          >
+            <Video size={14} /> Video Call
+          </button>
+        </div>
       </div>
 
       <div className="glass-card" style={{

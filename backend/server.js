@@ -88,20 +88,24 @@ io.on('connection', (socket) => {
 
   // WebRTC Call Signaling events
   socket.on('call-user', (data) => {
-    // data: { to, callerName, callerPicture }
-    console.log(`[Socket.io] User ${socket.userId} is calling ${data.to}`);
+    // data: { to, callerName, callerPicture, isAudioOnly }
+    console.log(`[Socket.io] User ${socket.userId} is calling ${data.to} (audioOnly: ${data.isAudioOnly})`);
     io.to(data.to).emit('incoming-call', { 
       from: socket.userId, 
       callerName: data.callerName,
-      callerPicture: data.callerPicture 
+      callerPicture: data.callerPicture,
+      isAudioOnly: !!data.isAudioOnly
     });
 
+    const notificationTitle = data.isAudioOnly ? 'Incoming Audio Call! 📞' : 'Incoming Video Call! 📞';
+
     // Dispatch native FCM push notification for incoming calls
-    sendFcmNotification(data.to, `Incoming SkillSwap Call 📞`, `${data.callerName} is calling you...`, {
+    sendFcmNotification(data.to, notificationTitle, `${data.callerName} is calling you...`, {
       type: 'call',
       callerId: socket.userId,
       callerName: data.callerName,
-      callerPicture: data.callerPicture || ''
+      callerPicture: data.callerPicture || '',
+      isAudioOnly: data.isAudioOnly ? 'true' : 'false'
     });
   });
 
